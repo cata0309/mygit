@@ -1,3 +1,7 @@
+//
+// Created by Marincia Cătălin on 21.12.2020.
+//
+
 #include "RequestHandlers.h"
 #include "DbOperations.h"
 
@@ -55,7 +59,7 @@ bool handler_add_permission_or_access_request(sqlite3 *sqlite3_descriptor,
   bool local_bool = false;
   const char *requester_username = json_object_dotget_string(request_root_object, "username");
   const char *other_username = json_object_dotget_string(request_root_object, "other_username");
-  if (isUserTheCreatorOfRepo(sqlite3_descriptor, repository_name, requester_username, &local_bool) == false) {
+  if (is_the_user_the_creator_of_the_repo(sqlite3_descriptor, repository_name, requester_username, &local_bool) == false) {
 	json_object_set_boolean(response_root_object, "error", true);
 	json_object_set_string(response_root_object,
 						   "message",
@@ -115,7 +119,7 @@ bool handler_del_permission_or_access_request(sqlite3 *sqlite3_descriptor,
   bool local_bool = false;
   const char *requester_username = json_object_dotget_string(request_root_object, "own_username");
   const char *other_username = json_object_dotget_string(request_root_object, "other_username");
-  if (isUserTheCreatorOfRepo(sqlite3_descriptor, repository_name, requester_username, &local_bool) == false) {
+  if (is_the_user_the_creator_of_the_repo(sqlite3_descriptor, repository_name, requester_username, &local_bool) == false) {
 	json_object_set_boolean(response_root_object, "error", true);
 	json_object_set_string(response_root_object,
 						   "message",
@@ -229,14 +233,11 @@ bool handler_get_changelog_request(sqlite3 *sqlite3_descriptor,
 	}
 	if (all_versions == true) {
 	  start = 1;
-	  json_object_set_number(response_root_object, "no_versions", version);
 	} else {
 	  start = version;
-	  json_object_set_number(response_root_object, "no_versions", 1);
 	}
   } else {
 	version = (u16)(json_object_dotget_number(request_root_object, "version"));
-	json_object_set_number(response_root_object, "no_versions", 1);
 	start = version;
   }
   JSON_Value *changelogs_value = json_value_init_array();
@@ -246,16 +247,29 @@ bool handler_get_changelog_request(sqlite3 *sqlite3_descriptor,
 	  json_object_set_boolean(response_root_object, "error", true);
 	  json_object_set_string(response_root_object, "message", "Cannot get the changelog for the repository at "
 															  "specific version");
-	  json_object_dotremove(response_root_object, "no_versions");
 	  free(changelog);
 	  return false;
 	}
 	json_array_append_string(changelog_array, changelog);
   }
   json_object_set_value(response_root_object, "changelogs", changelogs_value);
+
+  JSON_Value *unix_dates_value = json_value_init_array();
+  JSON_Array *unix_dates_array = json_value_get_array(unix_dates_value);
+  u32 unix_date;
+  for (i32 index = version; index >= start; --index) {
+	if (get_push_time_version(sqlite3_descriptor, repository_name, index, &unix_date) == false) {
+	  json_object_set_boolean(response_root_object, "error", true);
+	  json_object_set_string(response_root_object, "message", "Cannot get the unix date of push for the repository at "
+															  "specific version");
+	  free(changelog);
+	  return false;
+	}
+	json_array_append_number(unix_dates_array, unix_date);
+  }
+  json_object_set_value(response_root_object, "dates", unix_dates_value);
   json_object_set_boolean(response_root_object, "error", false);
   json_object_set_string(response_root_object, "message", "Changelogs have been successfully queried");
-
   free(changelog);
   return true;
 }
@@ -342,8 +356,8 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 		}
 		if (temp_bool == false) {
 		  json_object_set_boolean(response_root_object, "error", true);
-		  json_object_set_string(response_root_object, "message", "The repository is private, you must wait for it to go "
-																  "public or have the owner give you access to it");
+		  json_object_set_string(response_root_object, "message", "The repository is private/does not exist, you must wait for it to go "
+																  "public or have the owner give you access to it/be created");
 		  return false;
 		}
 	  }
@@ -553,6 +567,14 @@ bool handler_checkout_differences_request(sqlite3 *sqlite3_descriptor,
 	json_object_set_value(response_root_object, "differences", difference_contents_value);
 	json_object_set_value(response_root_object, "filenames", file_names_value);
   }
+  u32 unix_date;
+  if (get_push_time_version(sqlite3_descriptor, repository_name, version, &unix_date) == false) {
+	json_object_set_boolean(response_root_object, "error", true);
+	json_object_set_string(response_root_object, "message", "Cannot get the unix date of push for the repository at "
+															"specific version");
+	return false;
+  }
+  json_object_dotset_number(response_root_object, "date", unix_date);
   json_object_set_boolean(response_root_object, "error", false);
   json_object_set_string(response_root_object, "message", "Repository checkout|clone|pull|difference json has been "
 														  "successfully made");
@@ -731,7 +753,7 @@ bool handler_make_repo_switch_access_request(sqlite3 *sqlite3_descriptor,
 											 bool make_public) {
   bool local_bool = false;
   const char *username = json_object_dotget_string(request_root_object, "username");
-  if (isUserTheCreatorOfRepo(sqlite3_descriptor, repository_name, username, &local_bool) == false) {
+  if (is_the_user_the_creator_of_the_repo(sqlite3_descriptor, repository_name, username, &local_bool) == false) {
 	json_object_set_boolean(response_root_object, "error", true);
 	json_object_set_string(response_root_object,
 						   "message",

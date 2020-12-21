@@ -1,3 +1,7 @@
+//
+// Created by Marincia Cătălin on 19.12.2020.
+//
+
 #ifndef DBINTERACT__REQUESTHANDLERS_H_
 #define DBINTERACT__REQUESTHANDLERS_H_
 #include "DbOperations.h"
@@ -10,7 +14,6 @@ bool handler_add_user_request(sqlite3 *sqlite3_descriptor,
 							  JSON_Object *request_root_object,
 							  JSON_Object *response_root_object);
 
-// <----restricted begin
 bool handler_add_permission_or_access_request(sqlite3 *sqlite3_descriptor,
 											  const char *repository_name,
 											  JSON_Object *request_root_object,
@@ -28,7 +31,6 @@ bool handler_push_request(sqlite3 *sqlite3_descriptor,
 						  JSON_Object *request_root_object,
 						  JSON_Object *response_root_object);
 
-// <----restricted end
 bool handler_checkout_file_request(sqlite3 *sqlite3_descriptor,
 								   const char *repository_name,
 								   JSON_Object *request_root_object,
@@ -43,7 +45,7 @@ bool handler_ls_remote_files_request(sqlite3 *sqlite3_descriptor,
 									 const char *repository_name,
 									 JSON_Object *request_root_object,
 									 JSON_Object *response_root_object);
-// checkout+pull+clone
+// checkout + pull + clone
 bool handler_checkout_differences_request(sqlite3 *sqlite3_descriptor,
 										  const char *repository_name,
 										  JSON_Object *request_root_object,

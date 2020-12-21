@@ -1,3 +1,20 @@
+//#include <string.h>
+//#include <sys/stat.h>
+//#include "RequestHandlers.h"
+//extern i32 errno;
+//
+//
+//i32 main(i32 argc, char**argv){
+//  struct stat st;
+//  if(stat("database.db", &st)==-1){
+//    // the file does not exist
+//    CHECKEXIT(create_database("database.db")==true, false,
+//			  "Cannot create database")
+//  }
+//
+//  return 0;
+//}
+
 #include <string.h>
 #include "RequestHandlers.h"
 
@@ -5,9 +22,9 @@
      printf("status line[%d] {%s}\n", __LINE__, condition?"OK":"FAIL");
 int main(int argc, char *argv[]) {
   if(argc>2){
-    create_database("database.db");
-    printf("yes");
-    exit(EXIT_SUCCESS);
+	create_database("database.db");
+	printf("yes");
+	exit(EXIT_SUCCESS);
   }
 //  CHECKEXIT(create_database("database.db")==true, "Cannot create database")
   sqlite3 *sqlite3_descriptor;
@@ -90,9 +107,10 @@ int main(int argc, char *argv[]) {
 //					   investigat, trebuie adaugat mesaj de eroare
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
-//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"get_changelog_request\", "
-//										   "\"repository_name\":\"proiect la plp\",\"has_version\":false, "
-//			 "\"all_versions\":false}",
+//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"get_changelog_request\", \"username\":\"alexandra\", "
+//										   "\"password\":\"parola1\","
+//										   "\"repository_name\":\"proiect sla plp\",\"has_version\":false, "
+//			 "\"all_versions\":true}",
 //					   jsvalue))
 ////					   investigat, trebuie adaugat mesaj de eroare
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
@@ -103,24 +121,26 @@ int main(int argc, char *argv[]) {
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
 
 
-//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"checkout_request\", "
-//										   "\"repository_name\":\"proiect la plp\",\"has_version\":true, \"version\":2}",
+//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"checkout_request\", \"username\":\"alexandra\", "
+//										   										   "\"password\":\"parola1\","
+//										   "\"repository_name\":\"proiect la plp\",\"has_version\":true, \"version\":4}",
 //					   jsvalue))
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
 
-//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"get_differences_request\", "
+//  try(handler_requests(sqlite3_descriptor, "{\"message_type\":\"get_differences_request\", \"username\":\"alexandra\", "
+//										   "\"password\":\"parola1\","
 //										   "\"repository_name\":\"proiect la plp\",\"has_version\":true, \"version\":3}",
 //					   jsvalue))
 //  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
 
- JSON_Value *val = json_parse_file("json.json");
+//  JSON_Value *val = json_parse_file("json.json");
 ////// printf("YEES");
- char ptr[700];
- strcpy(ptr, json_serialize_to_string(val));
+//  char ptr[700];
+//  strcpy(ptr, json_serialize_to_string(val));
 //// JSON_Object *jsobject = json_value_get_object(jsvalue);
 //// json_object_clear(jsobject);
- try(handler_requests(sqlite3_descriptor, ptr, jsvalue))
-  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
+//  try(handler_requests(sqlite3_descriptor, ptr, jsvalue))
+//  printf("response: '%s'\n", json_serialize_to_string_pretty(jsvalue));
 // printf("%s", json_serialize_to_string(val));
 //  char *pusher="{\"repository_name\":\"bananierul\",\"msg_type\": \"push_request\",\"username\": \"catalin\",\"password\":\"parola1\",\"changelog\": \"initial commit baby\",\"filenames\": [\"cainele.cpp\",\"manelus.c\",\"cici\".rs\"],\"filecontents\": [\"#include<iostream> class caine{}; int main(){ caine c; return MAXIMUS;}\","
 //   "\"#include<stdio.h>"

@@ -1,3 +1,7 @@
+//
+// Created by Marincia Cătălin on 15.12.2020.
+//
+
 #include "DbOperations.h"
 
 #include <stdio.h>
@@ -314,7 +318,10 @@ bool repo_exists_in_STORAGE(sqlite3 *sqlite3_descriptor, const char *repository_
   return true;
 }
 
-bool isUserTheCreatorOfRepo(sqlite3 *sqlite3_descriptor, const char *repository_name, const char *username, bool *context) {
+bool is_the_user_the_creator_of_the_repo(sqlite3 *sqlite3_descriptor,
+										 const char *repository_name,
+										 const char *username,
+										 bool *context) {
   char condition[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + MAX_USER_NAME_LEN];
   CHECKRET(sprintf(condition, "repository_name='%s' AND username='%s'", repository_name, username) > 0, false,
 		   "Error at 'sprintf()'")
@@ -390,6 +397,21 @@ bool get_changelog_version(sqlite3 *sqlite3_descriptor, const char *repository_n
   i32 status = sqlite3_step(stmt);
   CHECKRET(status == SQLITE_ROW, false, "No rows returned or an error occurred")
   strcpy(context, (const char *)sqlite3_column_text(stmt, 0));
+  return true;
+}
+
+bool get_push_time_version(sqlite3 *sqlite3_descriptor, const char *repository_name, u16 version, u32 *context) {
+  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN];
+  CHECKRET(
+	  sprintf(stmt_string, "SELECT unix_date FROM versions WHERE repository_name='%s' AND version=%d;", repository_name,
+			  version) > 0, false, "Error at 'sprintf()'")
+  sqlite3_stmt *stmt;
+  CHECKRET(sqlite3_prepare_v2(sqlite3_descriptor, stmt_string, -1, &stmt, NULL) == SQLITE_OK,
+		   false,
+		   "Error at preparing statement")
+  i32 status = sqlite3_step(stmt);
+  CHECKRET(status == SQLITE_ROW, false, "No rows returned or an error occurred")
+  *context = (u32)sqlite3_column_int(stmt, 0);
   return true;
 }
 
