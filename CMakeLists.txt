@@ -14,5 +14,17 @@ add_executable(server
         libs/parson/parson.h
         libs/parson/parson.c
         source/server/RequestHandlers.h
-        source/server/RequestHandlers.c source/common/Macros.h source/common/Transfer.h source/common/Transfer.c)
+        source/server/RequestHandlers.c
+        source/common/Macros.h
+        source/common/Transfer.h
+        source/common/Transfer.c)
 target_link_libraries(server sqlite3)
+
+add_executable(client
+        source/client/main.c
+        libs/parson/parson.h
+        libs/parson/parson.c
+        source/common/Macros.h
+        source/common/Transfer.h
+        source/common/Transfer.c
+        )

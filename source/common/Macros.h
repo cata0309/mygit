@@ -31,7 +31,7 @@ typedef uint64_t u64;
 #define MB5 5242880
 #define MB20 20971520
 //#define MB15 15728640
-//#define MB10 10485760
+#define MB10 10485760
 
 //#define MB1 1048576
 

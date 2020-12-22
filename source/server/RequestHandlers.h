@@ -46,18 +46,17 @@ bool handler_ls_remote_files_request(sqlite3 *sqlite3_descriptor,
 									 JSON_Object *request_root_object,
 									 JSON_Object *response_root_object);
 // checkout + pull + clone
-bool handler_checkout_differences_request(sqlite3 *sqlite3_descriptor,
-										  const char *repository_name,
-										  JSON_Object *request_root_object,
-										  JSON_Object *response_root_object,
-										  bool is_difference);
+bool handler_checkout_or_differences_request(sqlite3 *sqlite3_descriptor,
+											 const char *repository_name,
+											 JSON_Object *request_root_object,
+											 JSON_Object *response_root_object,
+											 bool is_difference);
 
 bool handler_make_repo_switch_access_request(sqlite3 *sqlite3_descriptor,
 											 const char *repository_name,
 											 JSON_Object *request_root_object,
 											 JSON_Object *response_root_object,
 											 bool make_public);
-
 
 bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Value *response_root_value);
 #endif

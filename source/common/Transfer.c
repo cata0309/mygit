@@ -89,37 +89,38 @@ i32 read_with_prefix_secure(i32 source_file_descriptor,
   return -1;
 }
 
-i32 write_data_three_pass(i32 destination_file_descriptor,
-						  const char *buffer,
-						  const u32 expected_no_bytes_written,
-						  const u32 key) {
-  CHECKRET(write_with_prefix_secure(destination_file_descriptor, buffer, expected_no_bytes_written, key), -1,
+bool write_data_three_pass(i32 destination_file_descriptor,
+						   const char *buffer,
+						   const u32 expected_no_bytes_written,
+						   const u32 key) {
+  CHECKRET(write_with_prefix_secure(destination_file_descriptor, buffer, expected_no_bytes_written, key), false,
 		   "Three-pass(send): stage 1, cannot encrypt and send the message")
   char *other_encrypted_data = (char *)(malloc(expected_no_bytes_written));
-  CHECKRET(read_with_prefix_secure(destination_file_descriptor, other_encrypted_data, key) == expected_no_bytes_written, -1,
+  CHECKRET(read_with_prefix_secure(destination_file_descriptor, other_encrypted_data, key) == expected_no_bytes_written,
+		   false,
 		   "Three-pass(send): stage 2, cannot read double encrypted message")
-  CHECKRET(write_with_retry(destination_file_descriptor, &expected_no_bytes_written, sizeof(u32)) == sizeof(u32), -1,
+  CHECKRET(write_with_retry(destination_file_descriptor, &expected_no_bytes_written, sizeof(u32)) == sizeof(u32), false,
 		   "Three-pass(send): stage 3, cannot send the size of the encrypted message")
   CHECKRET(
 	  write_with_retry(destination_file_descriptor, other_encrypted_data, expected_no_bytes_written)
-		  == expected_no_bytes_written, -1,
+		  == expected_no_bytes_written, false,
 	  "Three-pass(send): stage 3, cannot send the encrypted message")
   free(other_encrypted_data);
-  return 0;
+  return true;
 }
 
-i32 read_data_three_pass(i32 source_file_descriptor, char *buffer, u32 key) {
+bool read_data_three_pass(i32 source_file_descriptor, char *buffer, u32 key) {
   u32 length;
-  CHECKRET(read_with_retry(source_file_descriptor, &length, sizeof(u32)) == sizeof(u32), -1,
+  CHECKRET(read_with_retry(source_file_descriptor, &length, sizeof(u32)) == sizeof(u32), false,
 		   "Three-pass(receive): stage 1, cannot read the size of the encrypted message")
-  CHECKRET(read_with_retry(source_file_descriptor, buffer, length) == length, -1,
+  CHECKRET(read_with_retry(source_file_descriptor, buffer, length) == length, false,
 		   "Three-pass(receive): stage 1, cannot read the encrypted message")
   buffer[length] = '\0';
-  CHECKRET(write_with_prefix_secure(source_file_descriptor, buffer, length, key), -1,
+  CHECKRET(write_with_prefix_secure(source_file_descriptor, buffer, length, key), false,
 		   "Three-pass(receive): stage 2, cannot write the double encrypted message")
-  CHECKRET(read_with_prefix_secure(source_file_descriptor, buffer, key), -1,
+  CHECKRET(read_with_prefix_secure(source_file_descriptor, buffer, key), false,
 		   "Three-pass(receive): stage 3, cannot write the double encrypted message")
-  return 0;
+  return true;
 }
 
 u32 generate_random_key(void) {
