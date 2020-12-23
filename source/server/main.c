@@ -72,7 +72,7 @@ i32 main(i32 argc, char **argv) {
 	  JSON_Value *response_value = json_value_init_object();
 	  JSON_Object *response_root_object = json_value_get_object(response_value);
 	  handler_exit_status = handler_requests(sqlite3_descriptor, request_buffer, response_value);
-	  json_object_set_boolean(response_root_object, "error", !handler_exit_status);
+	  json_object_set_boolean(response_root_object, "is_error", !handler_exit_status);
 	  CHECKCODERET(write_data_three_pass(client_sock_fd,
 										 json_serialize_to_string(response_value),
 										 json_serialization_size(response_value),

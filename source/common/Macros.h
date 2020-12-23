@@ -23,6 +23,7 @@ typedef uint64_t u64;
 #define MAX_REPO_NAME_LEN 40
 #define MAX_USER_NAME_LEN 25
 #define MAX_PASSWORD_LEN 35
+#define MAX_CHECK_VISIBILITY_LEN 400
 #define UNPREDICTED_LEN 40
 #define MAX_KEY 1024
 #define MIN_KEY 10
@@ -45,7 +46,12 @@ typedef uint64_t u64;
     fprintf(stderr, "\n");\
     return value;\
   }
-
+#define CHECKCLIENT(condition, ...)\
+  if(!(condition)){\
+    fprintf(stderr, __VA_ARGS__);\
+    fprintf(stderr, "\n");\
+    exit(EXIT_FAILURE);\
+  }
 #define CHECKCODERET(condition, value, code, ...)\
   if(!(condition)){\
     fprintf(stderr, "pid: %d, line: %d, func: %s, msg: ", getpid(), __LINE__, __func__);\
