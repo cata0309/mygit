@@ -45,18 +45,18 @@ i32 read_with_retry(i32 source_file_descriptor,
 					void *buffer,
 					u32 expected_no_bytes_read) {
   // handle partial reads
-  char *ptrBuffer = buffer;
-  i32 bytesRead;
-  i32 totalBytesRead = 0;
-  while ((bytesRead = read(source_file_descriptor, ptrBuffer, expected_no_bytes_read)) != 0) {
-	if (bytesRead == -1) {
+  char *ptr_buffer = buffer;
+  i32 bytes_read;
+  i32 total_bytes_read = 0;
+  while ((bytes_read = read(source_file_descriptor, ptr_buffer, expected_no_bytes_read)) != 0) {
+	if (bytes_read == -1) {
 	  return -1;
 	}
-	totalBytesRead += bytesRead;
-	ptrBuffer += bytesRead;
-	expected_no_bytes_read -= bytesRead;
+	total_bytes_read += bytes_read;
+	ptr_buffer += bytes_read;
+	expected_no_bytes_read -= bytes_read;
   }
-  return totalBytesRead;
+  return total_bytes_read;
 }
 
 i32 write_with_prefix_secure(i32 destination_file_descriptor,

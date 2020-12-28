@@ -630,9 +630,9 @@ bool handler_push_request(sqlite3 *sqlite3_descriptor,
   char *difference = (char *)(malloc(MB5));
   char *server_file_content = (char *)(malloc(MB5));
   char *received_file_content = (char *)(malloc(MB5));
-  char received_file_name[MAX_FILE_NAME_LEN];
-  char path_file_version1[MAX_FILE_NAME_LEN];
-  char path_file_version2[MAX_FILE_NAME_LEN];
+  char received_file_name[MAX_FILE_PATH_LEN];
+  char path_file_version1[MAX_FILE_PATH_LEN];
+  char path_file_version2[MAX_FILE_PATH_LEN];
   i32 fd_version1;
   i32 fd_version2;
   i32 pipes[2];

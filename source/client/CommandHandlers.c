@@ -6,7 +6,10 @@
 #include <termios.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <ctype.h>
+#include <pwd.h>
+#include <limits.h>
+#include <fcntl.h>
+#include <dirent.h>
 #include "CommandHandlers.h"
 #include "../common/Transfer.h"
 void get_password_from_stdin(bool confirm, char *password) {
@@ -73,7 +76,6 @@ bool is_repo_public_client(i32 server_socket_fd, u32 key, const char *repository
   bool is_public = json_object_dotget_boolean(json_object, "is_public");
   return is_public;
 }
-
 bool validate_address(const char *ip_address) {
   if (strlen(ip_address) > 15 || strlen(ip_address) < 7)
 	return false;
@@ -83,8 +85,9 @@ bool validate_address(const char *ip_address) {
   }
   i32 index = 0;
   u8 section_index = 0;
-  i32 number;
+  u16 number;
   u8 dots = 0;
+  char *pointer_end;
   bool accepting_digits = true;
   while (index < strlen(ip_address)) {
 	if (accepting_digits == true) {
@@ -95,7 +98,7 @@ bool validate_address(const char *ip_address) {
 	  section_index += 1;
 	  if (section_index == 3 || (index + 1 < strlen(ip_address) && ip_address[index + 1] == '.')) {
 		section[section_index] = '\0';
-		number = atoi(section); //todo replace with strtol
+		number = (u16)strtol(section, &pointer_end, 10);
 		if (!(number >= 0 && number <= 255)) {
 		  return false;
 		}
@@ -113,9 +116,250 @@ bool validate_address(const char *ip_address) {
   return dots == 3;
 }
 
-void parse_command_line(i32 server_socket_fd, i32 argc, char **argv) {
-  char *option = argv[1];
+void copy_content_fd(i32 source_fd, i32 destination_fd) {
+  char buffer[BUFSIZ];
+  i32 bytes_read;
+  while ((bytes_read = read_with_retry(source_fd, buffer, BUFSIZ)) != -1) {
+	if (bytes_read == 0) {
+	  break;
+	}
+	CHECKCLIENT(write_with_retry(destination_fd, buffer, bytes_read) != bytes_read,
+				"Internal error at writing in staging area")
+  }
+}
+
+void show_help(const char *executable, bool exit_after_show) {
+  printf("Usage : ./%s OPTION [ARGS,...]\nThese are common CMA commands used in various situations:\n"
+		 "	help - shows this message\n"
+		 "	init <repository_name> - creates a repository with the provided name\n"
+		 "	reset - resets the working directory files to the ones from the cloned version\n"
+		 "	stage-file <filename> - adds file to the staging area\n"
+		 "	unstage-file <filename> - removes file from the staging area\n"
+		 "	delete-file <filename> - removes file from the staging area, working directory and untouched directory\n"
+		 "	restore-file <filename> - restores the file in the working directory\n"
+		 "	append-changelog - appends a message to the current repository changelog\n"
+		 "	list-dirty - lists the files from the working directory that are modified\n"
+		 "	list-untouched - lists the files from the version of the repository that was cloned\n"
+		 "	list-staged - lists the files from the staging area\n"
+		 "	list-remote [-v <version>] - lists the files from remote repository, if no version is provided the latest one is "
+		 "considered\n"
+		 "	register <username> <password> - creates a new account on the server\n"
+		 "	clone -n <repository-name> [-v <version>] - clones the remote specified repo, if no version is provided the latest one"
+		 " is considered\n"
+		 "	pull - gets latest remote version of the current repository\n"
+		 "	diff-file-version -f <filename> -v version - gets the differences of current working directory file and one from the "
+		 "server at specific version\n"
+		 "	diff-version <version> - gets all the differences between the specified version and the one before it\n"
+		 "	checkout - gets the latest version of the repository\n"
+		 "	checkout-file <filename> [-v version] - gets the file from the repository from the specific version, if none is "
+		 "provided the latest one is considered\n"
+		 "	get-changelog <version> - gets the changelog of the current repository at specific version\n"
+		 "	allow-access <username> - allows access to the repository for a specific user if the repository is private\n"
+		 "	block-access <username> - blocks access to the repository for a specific user if the repository is private\n"
+		 "	allow-edit <username> - allows edit rights to a specific user for the current repository\n"
+		 "	block-edit <username> - removes edit rights of a specific user for the current repository\n"
+		 "	go-public - makes the repository public(only the owner can do this)\n"
+		 "	go-private - makes the repository private(only the owner can do this)\n"
+		 "	push - upload files from staging area to the server\n", executable);
+  if (exit_after_show == true) {
+	exit(EXIT_SUCCESS);
+  }
+}
+
+bool is_internal_name(const char *filename) {
+  return (strcmp(filename, ".staged") == 0 || strcmp(filename, ".untouched") == 0 || strcmp(filename, ".repo_config") == 0
+	  || strcmp(filename, ".marked_as_deleted") == 0 || strcmp(filename, ".changelog") == 0);
+}
+
+void show_unknown_command(const char *executable, const char *command) {
+  fprintf(stderr, "Unknown command: '%s'\n", command);
+  show_help(executable, true);
+}
+
+void list_files(const char *directory) {
+  DIR *dir = NULL;
+  struct dirent *de;
   struct stat st;
+  CHECKCLIENT(stat(directory, &st) == 0, "Error at stat")
+  CHECKCLIENT (NULL != (dir = opendir(directory)), "Error at opening directory")
+  while (NULL != (de = readdir(dir))) {
+	if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
+	  if (S_ISDIR(st.st_mode) != 0) {
+		if (is_internal_name(de->d_name) == false) {
+		  printf("- %s\n", de->d_name);
+		}
+	  }
+	}
+  }
+  CHECKCLIENT(closedir(dir) == 0, "Error at closing directory")
+}
+
+bool parse_non_connection_command_line(i32 argc, char **argv) {
+  char *option = argv[1];
+  char temp_path[PATH_MAX];
+  char cwd[PATH_MAX];
+  struct stat st;
+  if (strcmp(option, "help") == 0) {
+	show_help(argv[0], false);
+	return true;
+  }
+  if (strcmp(option, "serv-conf") == 0) {
+	char serv_conf_file[MAX_FILE_PATH_LEN];
+	char *pointer_end;
+	struct passwd *pw = getpwuid(getuid());
+	strcpy(serv_conf_file, pw->pw_dir);
+	strcat(serv_conf_file, "/.cma_server");
+	CHECKCLIENT(argc == 4, "Usage: %s serv-conf ip_address port", argv[0])
+	char *ip_address = argv[2];
+	CHECKCLIENT(validate_address(ip_address) == true, "You need to insert a valid ip address")
+	u16 port = (u16)strtol(argv[3], &pointer_end, 10);
+	JSON_Value *conf_value = json_value_init_object();
+	JSON_Object *conf_object = json_value_get_object(conf_value);
+	json_object_set_string(conf_object, "ip_address", ip_address);
+	json_object_set_number(conf_object, "port", port);
+	json_serialize_to_file_pretty(conf_value, serv_conf_file);
+	return true;
+  }
+  if (strcmp(option, "init") == 0) {
+	CHECKCLIENT(argc == 2, "'%s' is a no arguments option, try again", option)
+	CHECKCLIENT(stat(".repo_config", &st) == -1, "There is already a repository created here, you cannot create other one")
+	CHECKCLIENT(getcwd(cwd, sizeof(cwd)) != NULL, "Cannot get the current directory path")
+	JSON_Value *conf_value = json_value_init_object();
+	JSON_Object *conf_object = json_value_get_object(conf_value);
+	json_object_set_string(conf_object, "repository_name", strrchr(cwd, '/') + 1);
+	json_serialize_to_file_pretty(conf_value, ".repo_config");
+	CHECKCLIENT(mkdir(".staging", 0700) == 0, "Cannot create .staging directory")
+	CHECKCLIENT(mkdir(".untouched", 0700) == 0, "Cannot create .untouched directory")
+	return true;
+  }
+  CHECKCLIENT(stat(".repo_config", &st) != -1, "You must clone or create a repository before doing operations on it")
+  if (strcmp(option, "reset") == 0) {
+	CHECKCLIENT(argc == 2, "'%s' is a no arguments option, try again", option)
+	return true;
+  }
+  if (strcmp(option, "stage-file") == 0) {
+	CHECKCLIENT(argc == 3, "Usage: '%s' stage-file <filename>", option)
+	CHECKCLIENT(!strchr(argv[2], '/'), "You can use only local files")
+	CHECKCLIENT(!is_internal_name(argv[2]), "You cannot operate with tool files")
+	CHECKCLIENT(stat(argv[2], &st) != -1, "The file '%s' does not exist, cannot add", argv[2])
+	CHECKCLIENT(S_ISDIR(st.st_mode) != 0, "You cannot add directories")
+	CHECKCLIENT(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+	i32 source_fd = open(argv[2], O_RDONLY);
+	CHECKCLIENT(source_fd != -1, "Cannot open file for reading '%s'", argv[2])
+	strcpy(temp_path, ".staged/");
+	strcat(temp_path, argv[2]);
+	i32 destination_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	CHECKCLIENT(destination_fd != -1, "Cannot open file for writing '%s'", argv[2])
+	copy_content_fd(source_fd, destination_fd);
+	CHECKCLIENT(close(source_fd) == 0, "Error at closing source fd for file %s", argv[2])
+	CHECKCLIENT(close(destination_fd) == 0, "Error at closing destination fd for file %s", argv[2])
+	return true;
+  }
+  if (strcmp(option, "unstage-file") == 0) {
+	CHECKCLIENT(argc == 3, "Usage: '%s' unstage-file <filename>", option)
+	CHECKCLIENT(!strchr(argv[2], '/'), "You can use only local files")
+	CHECKCLIENT(!is_internal_name(argv[2]), "You cannot operate with tool files")
+	CHECKCLIENT(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+	strcpy(temp_path, ".staged/");
+	strcat(temp_path, argv[2]);
+	CHECKCLIENT(stat(temp_path, &st) != -1, "The file '%s' does not exist in the staging area, cannot unstage", argv[2])
+	CHECKCLIENT(remove(temp_path) != -1, "The file '%s' could not be removed from the staging area", temp_path)
+	return true;
+  }
+  if (strcmp(option, "delete-file") == 0) {
+	CHECKCLIENT(argc == 3, "Usage: '%s' delete-file <filename>", option)
+	CHECKCLIENT(!strchr(argv[2], '/'), "You can use only local files")
+	CHECKCLIENT(!is_internal_name(argv[2]), "You cannot operate with tool files")
+	CHECKCLIENT(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+	CHECKCLIENT(stat(argv[2], &st) != -1, "The file '%s' does not exist, cannot delete", argv[2])
+	JSON_Value *marked_as_deleted_value;
+	JSON_Array *marked_as_deleted_array;
+	if (stat(".marked_as_deleted", &st) != -1) {
+	  marked_as_deleted_value = json_parse_file(".marked_as_deleted");
+	  marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
+	} else {
+	  marked_as_deleted_value = json_value_init_array();
+	  marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
+	}
+	json_array_append_string(marked_as_deleted_array, argv[2]);
+	json_serialize_to_file_pretty(marked_as_deleted_value, ".marked_as_deleted");
+	CHECKCLIENT(remove(argv[2]) != -1, "The file '%s' could not be removed from the current working directory", argv[2])
+	strcpy(temp_path, ".staged/");
+	strcat(temp_path, argv[2]);
+	if (stat(temp_path, &st) != -1) {
+	  CHECKCLIENT(remove(temp_path) != -1, "The file '%s' could not be removed from the staging area", temp_path)
+	}
+	return true;
+  }
+  if (strcmp(option, "restore-file") == 0) {
+	CHECKCLIENT(argc == 3, "Usage: '%s' restore-file <filename>", option)
+	CHECKCLIENT(!strchr(argv[2], '/'), "You can use only local files")
+	CHECKCLIENT(!is_internal_name(argv[2]), "You cannot operate with tool files")
+	CHECKCLIENT(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+	strcpy(temp_path, ".untouched/");
+	strcat(temp_path, argv[2]);
+	CHECKCLIENT(stat(temp_path, &st) != -1,
+				"The file '%s' does not exist in the .untouched directory, cannot restore",
+				argv[2])
+	i32 source_fd = open(temp_path, O_RDONLY);
+	i32 destination_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	CHECKCLIENT(source_fd != -1, "Cannot open file for reading '%s'", temp_path)
+	CHECKCLIENT(destination_fd != -1, "Cannot open file for writing '%s'", argv[2])
+	copy_content_fd(source_fd, destination_fd);
+	CHECKCLIENT(close(source_fd) == 0, "Error at closing source fd for file %s", argv[2])
+	CHECKCLIENT(close(destination_fd) == 0, "Error at closing destination fd for file %s", argv[2])
+	JSON_Value *marked_as_deleted_value = json_parse_file(".marked_as_deleted");
+	JSON_Array *marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
+	for (u32 index = 0; index < json_array_get_count(marked_as_deleted_array); ++index) {
+	  if (strcmp(json_array_get_string(marked_as_deleted_array, index), argv[2]) == 0) {
+		json_array_remove(marked_as_deleted_array, index);
+		break;
+	  }
+	}
+	json_serialize_to_file_pretty(marked_as_deleted_value, ".marked_as_deleted");
+	return true;
+  }
+  if (strcmp(option, "append-to-changelog") == 0) {
+	CHECKCLIENT(argc == 3, "Usage: '%s' append-to-changelog <message>", option)
+	JSON_Value *changelog_value;
+	JSON_Array *changelog_array;
+	if (stat(".changelog", &st) != -1) {
+	  changelog_value = json_parse_file(".changelog");
+	  changelog_array = json_value_get_array(changelog_value);
+	} else {
+	  changelog_value = json_value_init_array();
+	  changelog_array = json_value_get_array(changelog_value);
+	}
+	json_array_append_string(changelog_array, argv[2]);
+	json_serialize_to_file_pretty(changelog_value, ".changelog");
+	return true;
+  }
+  if (strcmp(option, "list-dirty") == 0) {
+	CHECKCLIENT(argc == 2, "'%s' is a no arguments option, try again", option)
+	CHECKCLIENT(getcwd(cwd, sizeof(cwd)) != NULL, "Cannot get the current directory path")
+	list_files(cwd);
+	return true;
+  }
+  if (strcmp(option, "list-untouched") == 0) {
+	CHECKCLIENT(argc == 2, "'%s' is a no arguments option, try again", option)
+	CHECKCLIENT(getcwd(cwd, sizeof(cwd)) != NULL, "Cannot get the current directory path")
+	strcat(cwd, "/.untouched");
+	list_files(cwd);
+	return true;
+  }
+  if (strcmp(option, "list-staged") == 0) {
+	CHECKCLIENT(argc == 2, "'%s' is a no arguments option, try again", option)
+	CHECKCLIENT(getcwd(cwd, sizeof(cwd)) != NULL, "Cannot get the current directory path")
+	strcat(cwd, "/.staged");
+	list_files(cwd);
+	return true;
+  }
+  return false;
+}
+
+bool parse_connection_command_line(i32 server_socket_fd, i32 argc, char **argv) {
+  char *option = argv[1];
+
   JSON_Value *json_request_value = json_value_init_object();
   JSON_Object *json_request_object = json_value_get_object(json_request_value);
   JSON_Value *json_response_value = NULL;
@@ -126,85 +370,6 @@ void parse_command_line(i32 server_socket_fd, i32 argc, char **argv) {
   u32 client_key = generate_random_key();
   char username[MAX_USER_NAME_LEN];
   char password[MAX_PASSWORD_LEN];
-  // this will not require any login or repository name since they do not any of them
-  // no connection required
-  if (strcmp(option, "help") == 0) {
-	//todo list
-	return;
-  }
-  if (strcmp(option, "init") == 0) {
-	u16 port;
-	char ip_address[16];
-	char repository_name[MAX_REPO_NAME_LEN];
-	CHECKCLIENT(stat(".repo_config", &st) == -1, "There is already a repository created here")
-	CHECKCLIENT(argc == 8, "Usage: %s init -n repository_name -a ip_address -p port", argv[0])
-	u8 options_filled = 0;
-	for (u8 index = 2; index < 8; ++index) {
-	  if (strcmp(argv[index], "-n") == 0) {
-		if (index + 1 < 8) {
-		  strcpy(repository_name, argv[index + 1]);
-		  index += 1;
-		  options_filled += 1;
-		}
-	  } else if (strcmp(argv[index], "-a") == 0) {
-		if (index + 1 < 8) {
-		  strcpy(ip_address, argv[index + 1]);
-		  index += 1;
-		  options_filled += 1;
-		}
-	  } else if (strcmp(argv[index], "-p") == 0) {
-		if (index + 1 < 8) {
-		  port = atoi(argv[index + 1]); // todo replace with strtol
-		  index += 1;
-		  options_filled += 1;
-		}
-	  }
-	}
-	CHECKCLIENT(options_filled == 3, "Usage: %s init -n repository_name -a ip_address -p port", argv[0])
-	CHECKCLIENT(validate_address(ip_address) == true, "You need to insert a valid ip address")
-	JSON_Value *conf_value = json_value_init_object();
-	JSON_Object *conf_object = json_value_get_object(conf_value);
-	json_object_set_string(conf_object, "repository_name", repository_name);
-	json_object_set_string(conf_object, "ip_address", ip_address);
-	json_object_set_number(conf_object, "port", port);
-	json_serialize_to_file_pretty(conf_value, ".repo_config");
-	// format json
-	return;
-  }
-  CHECKCLIENT(stat(".repo_config", &st) != -1, "You must clone or create a repository before doing operations on it")
-
-  if (strcmp(option, "reset") == 0) {
-	CHECKCLIENT(argc == 2, "reset is a no arguments option, try again")
-	return;
-  }
-
-  if (strcmp(option, "add-file") == 0) {
-	return;
-
-  }
-  if (strcmp(option, "remove-file") == 0) {
-
-	return;
-
-  }
-  if (strcmp(option, "restore-file") == 0) {
-	return;
-
-  }
-  if (strcmp(option, "append-to-changelog") == 0) {
-	return;
-
-  }
-  if (strcmp(option, "list-dirty") == 0) {
-	return;
-  }
-  if (strcmp(option, "list-untouched") == 0) {
-	return;
-  }
-  if (strcmp(option, "list-staged") == 0) {
-	return;
-  }
-
   if (strcmp(option, "register") == 0) {
 	CHECKCLIENT(argc == 2, "register is a no arguments option, try again")
 	char password_confirm[MAX_PASSWORD_LEN];
@@ -222,7 +387,7 @@ void parse_command_line(i32 server_socket_fd, i32 argc, char **argv) {
 	json_response_value = json_parse_string(response);
 	json_response_object = json_value_get_object(json_response_value);
 	is_error = json_object_dotget_boolean(json_response_object, "is_error");
-	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"));
+	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"))
 	printf("%s\n", json_object_dotget_string(json_response_object, "message"));
 	return;
   }
@@ -298,7 +463,7 @@ void parse_command_line(i32 server_socket_fd, i32 argc, char **argv) {
 	json_response_value = json_parse_string(response);
 	json_response_object = json_value_get_object(json_response_value);
 	is_error = json_object_dotget_boolean(json_response_object, "is_error");
-	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"));
+	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"))
 	printf("%s\n", json_object_dotget_string(json_response_object, "message"));
 	return;
   }
@@ -325,8 +490,39 @@ void parse_command_line(i32 server_socket_fd, i32 argc, char **argv) {
 	json_response_value = json_parse_string(response);
 	json_response_object = json_value_get_object(json_response_value);
 	is_error = json_object_dotget_boolean(json_response_object, "is_error");
-	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"));
+	CHECKCLIENT(is_error == false, "%s", json_object_dotget_string(json_response_object, "message"))
 	printf("%s\n", json_object_dotget_string(json_response_object, "message"));
 	return;
+  }
+  return false;
+}
+void parse_command_line(i32 argc, char **argv) {
+  bool local_bool = false;
+  local_bool = parse_non_connection_command_line(argc, argv);
+  if (local_bool == true) {
+	return;
+  }
+  struct stat st;
+  char serv_conf_file[MAX_FILE_PATH_LEN];
+  struct passwd *pw = getpwuid(getuid());
+  strcpy(serv_conf_file, pw->pw_dir);
+  strcat(serv_conf_file, "/.cma_server");
+  CHECKCLIENT(stat(serv_conf_file, &st) != -1,
+			  "Before doing network related operations you must set the remote server details")
+  i32 server_socket_fd = socket(AF_INET, SOCK_STREAM, 0);
+  struct sockaddr_in server_address;
+  JSON_Value *conf_value = json_parse_file(serv_conf_file);
+  JSON_Object *conf_object = json_value_get_object(conf_value);
+  bzero(&server_address, sizeof(server_address));
+  server_address.sin_family = AF_INET;
+  server_address.sin_port = htons(json_object_dotget_number(conf_object, "port"));
+  CHECKCLIENT(inet_pton(AF_INET, json_object_dotget_string(conf_object, "ip_address"), &server_address.sin_addr.s_addr) == 1,
+			  "Cannot convert str to valid address")
+  CHECKCLIENT(connect(server_socket_fd, (const struct sockaddr *)&server_address, sizeof(server_address)) == 0,
+			  "Cannot connect to the server")
+  local_bool = parse_connection_command_line(server_socket_fd, argc, argv);
+  CHECKCLIENT(shutdown(server_socket_fd, SHUT_RDWR) == 0, "Cannot shutdown client")
+  if (local_bool == false) {
+	show_unknown_command(argv[0], argv[1]);
   }
 }

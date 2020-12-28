@@ -169,8 +169,8 @@ bool add_version(sqlite3 *sqlite3_descriptor,
 
 bool add_deleted_filename(sqlite3 *sqlite3_descriptor, const char *repository_name, u16 version, const char *filename) {
   CHECKRET(strlen(repository_name) <= MAX_REPO_NAME_LEN, false, "Repository name too big")
-  CHECKRET(strlen(filename) <= MAX_FILE_NAME_LEN, false, "Filename too big")
-  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_NAME_LEN];
+  CHECKRET(strlen(filename) <= MAX_FILE_PATH_LEN, false, "Filename too big")
+  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_PATH_LEN];
   CHECKRET(sprintf(stmt_string, "INSERT INTO DELETIONS VALUES('%s', %d, '%s');", repository_name, version, filename) > 0,
 		   false, "Error at 'sprintf()'")
   return run_non_select_sqlite_statement(sqlite3_descriptor, stmt_string);
@@ -178,7 +178,7 @@ bool add_deleted_filename(sqlite3 *sqlite3_descriptor, const char *repository_na
 
 bool add_file(sqlite3 *sqlite3_descriptor, const char *repository_name, u16 version, const char *filename,
 			  const char *content, const char *difference) {
-  char *stmt_string = (char *)(malloc(MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_NAME_LEN + MB5 +
+  char *stmt_string = (char *)(malloc(MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_PATH_LEN + MB5 +
 	  MB5));
   CHECKCODERET(sprintf(stmt_string, "INSERT INTO STORAGE VALUES('%s', %d, '%s', '%s', '%s');",
 					   repository_name, version, filename, content, difference) > 0,
@@ -257,7 +257,7 @@ bool file_exists(sqlite3 *sqlite3_descriptor,
 				 u16 version,
 				 const char *filename,
 				 bool *context) {
-  char condition[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_NAME_LEN];
+  char condition[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_PATH_LEN];
   CHECKRET(
 	  sprintf(condition, "repository_name='%s' AND version=%d AND filename='%s'", repository_name, version, filename)
 		  > 0,
@@ -417,7 +417,7 @@ bool get_push_time_version(sqlite3 *sqlite3_descriptor, const char *repository_n
 
 bool get_file_content(sqlite3 *sqlite3_descriptor, const char *repository_name, u16 version, const char *filename,
 					  char *context) {
-  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_NAME_LEN];
+  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_PATH_LEN];
   CHECKRET (
 	  sprintf(stmt_string, "SELECT content FROM STORAGE WHERE repository_name='%s' AND version=%d AND filename='%s';",
 			  repository_name,
@@ -433,7 +433,7 @@ bool get_file_content(sqlite3 *sqlite3_descriptor, const char *repository_name, 
 
 bool get_file_difference(sqlite3 *sqlite3_descriptor, const char *repository_name, u16 version, const char *filename,
 						 char *context) {
-  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_NAME_LEN];
+  char stmt_string[MAX_SQL_STMT_LEN + MAX_REPO_NAME_LEN + UNPREDICTED_LEN + MAX_FILE_PATH_LEN];
   CHECKRET (
 	  sprintf(stmt_string, "SELECT difference FROM STORAGE WHERE repository_name='%s' AND version=%d AND filename='%s';",
 			  repository_name,
