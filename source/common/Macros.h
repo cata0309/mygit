@@ -20,6 +20,7 @@ typedef uint64_t u64;
 #define MAX_TABLE_NAME_LEN 20
 #define MAX_SQL_STMT_LEN 300
 #define MAX_FILE_PATH_LEN 50
+#define MAXJUNK 99999
 #define MAX_REPO_NAME_LEN 40
 #define MAX_USER_NAME_LEN 25
 #define MAX_PASSWORD_LEN 35
@@ -27,12 +28,15 @@ typedef uint64_t u64;
 #define UNPREDICTED_LEN 40
 #define MAX_KEY 1024
 #define MIN_KEY 10
+#define SMALL_BUFFER 512
+#define MEDIUM_BUFFER 4096
 // MB1
 #define MAX_CHANGELOG_LEN 1048576
 #define MB5 5242880
 #define MB20 20971520
 //#define MB15 15728640
 #define MB10 10485760
+#define MB1 1048576
 
 //#define MB1 1048576
 
@@ -46,7 +50,7 @@ typedef uint64_t u64;
     fprintf(stderr, "\n");\
     return value;\
   }
-#define CHECKCLIENT(condition, ...)\
+#define CHECKCL(condition, ...)\
   if(!(condition)){\
     fprintf(stderr, __VA_ARGS__);\
     fprintf(stderr, "\n");\

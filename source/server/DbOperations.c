@@ -422,6 +422,8 @@ bool get_file_content(sqlite3 *sqlite3_descriptor, const char *repository_name, 
 	  sprintf(stmt_string, "SELECT content FROM STORAGE WHERE repository_name='%s' AND version=%d AND filename='%s';",
 			  repository_name,
 			  version, filename) > 0, false, "Error at 'sprintf()'")
+  printf("get string : '%s'\n", stmt_string);
+
   sqlite3_stmt *stmt;
   CHECKRET(sqlite3_prepare_v2(sqlite3_descriptor, stmt_string, -1, &stmt, NULL) == SQLITE_OK, false,
 		   "Error at preparing statement")

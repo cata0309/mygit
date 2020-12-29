@@ -54,7 +54,6 @@ i32 main(i32 argc, char **argv) {
   u32 len_address;
   pid_t pid;
   bool handler_exit_status;
-  u32 server_key = generate_random_key();
   while (true) {
 	client_sock_fd = accept(server_socket_fd, (struct sockaddr *)&client_address, &len_address);
 	if (client_sock_fd == -1) {
@@ -65,7 +64,8 @@ i32 main(i32 argc, char **argv) {
 	if (pid == 0) {
 	  // child
 	  char *request_buffer = (char *)(malloc(MB20));
-	  CHECKCODERET(read_data_three_pass(client_sock_fd, request_buffer, server_key) == true,
+	  bzero(request_buffer, MB20);
+	  CHECKCODERET(read_with_prefix(client_sock_fd, request_buffer) == true,
 				   1,
 				   { free(request_buffer); },
 				   "Error at reading")
@@ -73,12 +73,25 @@ i32 main(i32 argc, char **argv) {
 	  JSON_Object *response_root_object = json_value_get_object(response_value);
 	  handler_exit_status = handler_requests(sqlite3_descriptor, request_buffer, response_value);
 	  json_object_set_boolean(response_root_object, "is_error", !handler_exit_status);
-	  CHECKCODERET(write_data_three_pass(client_sock_fd,
-										 json_serialize_to_string(response_value),
-										 json_serialization_size(response_value),
-										 server_key) == true, 1,
+	  CHECKCODERET(write_with_prefix(client_sock_fd,
+									 json_serialize_to_string(response_value),
+									 json_serialization_size(response_value)) == true, 1,
 				   { free(request_buffer); },
 				   "Cannot write response to client")
+	  if (strcmp(json_object_dotget_string(response_root_object, "message_type"), "is_repo_public_response") == 0) {
+		json_object_clear(response_root_object);
+		CHECKCODERET(read_with_prefix(client_sock_fd, request_buffer) == true,
+					 1,
+					 { free(request_buffer); },
+					 "Error at reading")
+		handler_exit_status = handler_requests(sqlite3_descriptor, request_buffer, response_value);
+		json_object_set_boolean(response_root_object, "is_error", !handler_exit_status);
+		CHECKCODERET(write_with_prefix(client_sock_fd,
+									   json_serialize_to_string(response_value),
+									   json_serialization_size(response_value)) == true, 1,
+					 { free(request_buffer); },
+					 "Cannot write response to client")
+	  }
 	  // exited
 	  free(request_buffer);
 	  fflush(stdout);

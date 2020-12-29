@@ -230,6 +230,8 @@ bool handler_get_changelog_request(sqlite3 *sqlite3_descriptor,
 
   JSON_Value *unix_dates_value = json_value_init_array();
   JSON_Array *unix_dates_array = json_value_get_array(unix_dates_value);
+  JSON_Value *versions_value = json_value_init_array();
+  JSON_Array *versions_array = json_value_get_array(versions_value);
   u32 unix_date;
   for (i32 index = version; index >= start; --index) {
 	if (get_push_time_version(sqlite3_descriptor, repository_name, index, &unix_date) == false) {
@@ -239,8 +241,10 @@ bool handler_get_changelog_request(sqlite3 *sqlite3_descriptor,
 	  return false;
 	}
 	json_array_append_number(unix_dates_array, unix_date);
+	json_array_append_number(versions_array, index);
   }
   json_object_set_value(response_root_object, "dates", unix_dates_value);
+  json_object_set_value(response_root_object, "versions", versions_value);
   json_object_set_string(response_root_object, "message", "Changelogs have been successfully queried");
   free(changelog);
   return true;
@@ -299,8 +303,8 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
   const char *message_type = json_object_dotget_string(request_root_object, "message_type");
   const char *repository_name = json_object_dotget_string(request_root_object, "repository_name");
   json_object_set_string(response_root_object, "repository_name", repository_name);
-  bool is_public, has_access;
-  if (strcmp(message_type, "add_user_request") != 0) {
+  bool is_public = false, has_access = false;
+  if (strcmp(message_type, "register_request") != 0) {
 	if (is_repo_public(sqlite3_descriptor, repository_name, &is_public) == false) {
 	  json_object_set_string(response_root_object, "message", "Cannot check the access specifier of the repository");
 	  return false;
@@ -308,7 +312,7 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 	if (strcmp(message_type, "is_repo_public_request") == 0) {
 	  json_object_set_string(response_root_object, "message_type", "is_repo_public_response");
 	  json_object_set_string(response_root_object, "message", "The visibility of repo was successfully queried");
-	  json_object_set_boolean(request_root_object, "is_public", is_public);
+	  json_object_set_boolean(response_root_object, "is_public", is_public);
 	  return true;
 	}
 	if (is_public == false) {
@@ -332,12 +336,16 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 	  }
 	}
   }
-  if (strcmp(message_type, "add_user_request") == 0) {
-	json_object_set_string(response_root_object, "message_type", "add_user_response");
+  if (strcmp(message_type, "register_request") == 0) {
+	json_object_set_string(response_root_object, "message_type", "register_response");
 	return handler_add_user_request(sqlite3_descriptor, request_root_object, response_root_object);
   }
-  if (strcmp(message_type, "add_permission_request") == 0) {
-	json_object_set_string(response_root_object, "message_type", "add_permission_response");
+  if (strcmp(message_type, "list_remote_files_request") == 0) {
+	json_object_set_string(response_root_object, "message_type", "list_remote_files_response");
+	return handler_ls_remote_files_request(sqlite3_descriptor, repository_name, request_root_object, response_root_object);
+  }
+  if (strcmp(message_type, "allow_edit_request") == 0) {
+	json_object_set_string(response_root_object, "message_type", "allow_edit_response");
 	if (embedded_login_request(sqlite3_descriptor, request_root_object) == false) {
 	  json_object_set_string(response_root_object, "message", "Bad credentials, cannot resolve any operation");
 	  return false;
@@ -359,7 +367,7 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 	json_object_set_string(response_root_object, "message_type", "get_changelog_response");
 	return handler_get_changelog_request(sqlite3_descriptor, repository_name, request_root_object, response_root_object);
   }
-  if (strcmp(message_type, "del_permission_request") == 0) {
+  if (strcmp(message_type, "block_edit_request") == 0) {
 	json_object_set_string(response_root_object, "message_type", "dell_permission_response");
 	if (embedded_login_request(sqlite3_descriptor, request_root_object) == false) {
 	  json_object_set_string(response_root_object, "message", "Bad credentials, cannot resolve any operation");
@@ -370,10 +378,7 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 													request_root_object,
 													response_root_object, false);
   }
-  if (strcmp(message_type, "ls_remote_files_request") == 0) {
-	json_object_set_string(response_root_object, "message_type", "ls_remote_files_response");
-	return handler_ls_remote_files_request(sqlite3_descriptor, repository_name, request_root_object, response_root_object);
-  }
+
   if (strcmp(message_type, "checkout_request") == 0) {
 	json_object_set_string(response_root_object, "message_type", "checkout_response");
 	return handler_checkout_or_differences_request(sqlite3_descriptor,
@@ -414,7 +419,7 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 	}
 	return handler_push_request(sqlite3_descriptor, repository_name, request_root_object, response_root_object);
   }
-  if (strcmp(message_type, "add_access_request") == 0) {
+  if (strcmp(message_type, "allow_access_request") == 0) {
 	json_object_set_string(response_root_object, "message_type", "add_access_response");
 	if (embedded_login_request(sqlite3_descriptor, request_root_object) == false) {
 	  json_object_set_string(response_root_object, "message", "Bad credentials, cannot resolve any operation");
@@ -425,7 +430,7 @@ bool handler_requests(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_Valu
 													request_root_object,
 													response_root_object, true);
   }
-  if (strcmp(message_type, "del_access_request") == 0) {
+  if (strcmp(message_type, "block_access_request") == 0) {
 	json_object_set_string(response_root_object, "message_type", "dell_access_response");
 	if (embedded_login_request(sqlite3_descriptor, request_root_object) == false) {
 	  json_object_set_string(response_root_object, "message", "Bad credentials, cannot resolve any operation");
@@ -619,7 +624,7 @@ bool handler_push_request(sqlite3 *sqlite3_descriptor,
 	json_object_set_string(response_root_object, "message", "Cannot figure out the next version number");
 	return false;
   }
-  const char *changelog = json_object_dotget_string(request_root_object, "changelog");
+  const char *changelog = json_serialize_to_string(json_object_get_value(request_root_object, "changelog"));
   if (add_version(sqlite3_descriptor, repository_name, username, new_version, unix_date, changelog) == false) {
 	json_object_set_string(response_root_object, "message", "Cannot create new version entry");
 	return false;
