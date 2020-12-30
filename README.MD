@@ -13,7 +13,9 @@ The application will have at least the following functionalities:
 
 ### Additional resources:
 http://ro.wikipedia.org/wiki/Apache_Subversion
+
 http://subversion.apache.org/docs/
+
 http://tortoisesvn.tigris.org/
 
 ### RO:
@@ -30,5 +32,7 @@ Aplicația va avea cel puțin următoarele funcționalitați:
 
 ### Resurse suplimentare: 
 http://ro.wikipedia.org/wiki/Apache_Subversion
+
 http://subversion.apache.org/docs/
+
 http://tortoisesvn.tigris.org/
