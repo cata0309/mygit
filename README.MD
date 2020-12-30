@@ -9,7 +9,7 @@ The application will have at least the following functionalities:
     - the operation of committing changes;
     - the revert operation (log files will be kept on the server that will describe the differences between the versions of a file).
 
-** Bonus **: creation of a graphical interface for logs in which commits, changes compared to the previous version can be viewed.
+**Bonus**: creation of a graphical interface for logs in which commits, changes compared to the previous version can be viewed.
 
 ### Additional resources:
 http://ro.wikipedia.org/wiki/Apache_Subversion
