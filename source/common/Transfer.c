@@ -2,14 +2,11 @@
 // Created by Marincia Cătălin on 22.12.2020.
 //
 
-// TPC = Three-Pass protocol Caesar cipher
 #include "Transfer.h"
 #include <errno.h>
 #include <unistd.h>
 
-i32 write_with_retry(i32 destination_file_descriptor,
-					 const void *buffer,
-					 u32 expected_no_bytes_written) {
+i32 write_with_retry(i32 destination_file_descriptor, const void *buffer, u32 expected_no_bytes_written) {
   // handle partial writes
   i32 bytesWritten;
   i32 totalBytesWritten = 0;
@@ -29,9 +26,7 @@ i32 write_with_retry(i32 destination_file_descriptor,
   return totalBytesWritten;
 }
 
-i32 read_with_retry(i32 source_file_descriptor,
-					void *buffer,
-					u32 expected_no_bytes_read) {
+i32 read_with_retry(i32 source_file_descriptor, void *buffer, u32 expected_no_bytes_read) {
   // handle partial reads
   char *ptr_buffer = buffer;
   i32 bytes_read;
@@ -48,12 +43,10 @@ i32 read_with_retry(i32 source_file_descriptor,
 }
 
 bool write_with_prefix(i32 destination_file_descriptor, const char *buffer, u32 expected_no_bytes_written) {
-  printf("trying to send: '%s'\n", buffer);
   CHECKRET (write_with_retry(destination_file_descriptor, &expected_no_bytes_written, sizeof(u32)) == sizeof(u32), false,
 			"Cannot write the size of the string that has to be written")
   CHECKRET(write_with_retry(destination_file_descriptor, buffer, expected_no_bytes_written) == expected_no_bytes_written,
 		   false, "Could not write the message")
-  printf("success sending\n");
   return true;
 }
 
@@ -64,6 +57,5 @@ bool read_with_prefix(i32 source_file_descriptor, char *buffer) {
   CHECKRET(read_with_retry(source_file_descriptor, buffer, expected_no_bytes_read) == expected_no_bytes_read, false,
 		   "Could not read the message")
   buffer[expected_no_bytes_read] = '\0';
-  printf("I received: '%s'\n", buffer);
   return true;
 }

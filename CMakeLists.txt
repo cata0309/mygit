@@ -28,6 +28,4 @@ add_executable(client
         source/common/Transfer.h
         source/common/Transfer.c
         source/client/CommandHandlers.h
-        source/client/CommandHandlers.c
-        source/client/ResponseHandlers.h
-        source/client/ResponseHandlers.c)
+        source/client/CommandHandlers.c)
