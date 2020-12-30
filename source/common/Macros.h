@@ -13,7 +13,6 @@ typedef int32_t i32;
 typedef uint32_t u32;
 typedef int64_t i64;
 typedef uint64_t u64;
-
 #define MAX_TABLE_NAME_LEN 20
 #define MAX_SQL_STMT_LEN 300
 #define MAX_FILE_PATH_LEN 50
@@ -24,15 +23,12 @@ typedef uint64_t u64;
 #define UNPREDICTED_LEN 40
 #define SMALL_BUFFER 512
 #define MEDIUM_BUFFER 4096
-// MB1
-#define MAX_CHANGELOG_LEN 1048576
+#define MAX_CHANGELOG_LEN 1048576 // MB1
 #define MB5 5242880
 #define MB20 20971520
 #define MB10 10485760
-
 #define READ_END 0
 #define WRITE_END 1
-
 #define CHECKRET(condition, value, ...)\
   if(!(condition)){\
     fprintf(stderr, "pid: %d, line: %d, func: %s, msg: ", getpid(), __LINE__, __func__);\
