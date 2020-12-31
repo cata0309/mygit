@@ -93,26 +93,26 @@ void cmd_help(const char *executable, bool exit_after) {
 		 "- help - shows this message\n"
 		 "- init - creates a repository with the current directory name\n"
 		 "- reset - resets the working directory files to the ones from the cloned version\n"
-		 "- stage-file <filename> - adds file to the staging area\n"
-		 "- unstage-file <filename> - removes file from the staging area\n"
-		 "- delete-file <filename> - removes file from the staging area, working directory and untouched directory\n"
-		 "- restore-file <filename> - restores the file in the working directory\n"
-		 "- append-message - appends a message to the current repository changelog\n"
+		 "- stage . | <filename1> [<filename2>, ...] - adds file to the staging area\n"
+		 "- unstage . | <filename1> [<filename2>, ...] - removes file from the staging area\n"
+		 "- delete . | <filename1> [<filename2>, ...] - removes file from the staging area, working directory and untouched directory\n"
+		 "- restore . | <filename1> [<filename2>, ...]  - restores the file in the working directory\n"
+		 "- message <message_to_append> - appends a message to the current repository changelog\n"
 		 "- list-dirty - lists the files from the working directory that are modified\n"
 		 "- list-untouched - lists the files from the version of the repository that was cloned\n"
 		 "- list-staged - lists the files from the staging area\n"
 		 "- list-remote [-v <version>] - lists the files from remote repository, if no version is provided the latest one "
 		 "is considered\n"
 		 "- register <username> <password> - creates a new account on the server\n"
-		 "- clone -n <repository-name - clones the remote specified repository(latest version)\n"
+		 "- clone <repository>-name [<new_directory_name>]- clones the remote specified repository(latest version)\n"
 		 "- pull - gets latest remote version of the current repository\n"
-		 "- diff-file <filename> [-v version] - gets the differences of current working directory file and one from the "
+		 "- diff-file <filename> [-v <version>] - gets the differences of current working directory file and one from the "
 		 "server at specific version\n"
 		 "- diff-version {<version>|latest}- gets all the differences between the specified version and the one before it\n"
 		 "- checkout <version> - gets the latest version of the repository\n"
 		 "- checkout-file <filename> [-v version] - gets the file from the repository from the specific version, if none is "
 		 "provided the latest one is considered\n"
-		 "- get-changelog {all| -v <version>} - gets the changelog of the current repository at specific version, no option means latest\n"
+		 "- get-changelog [all| -v <version>] - gets the changelog of the current repository at specific version, no option means latest\n"
 		 "- allow-access <username> - allows access to the repository for a specific user if the repository is private\n"
 		 "- block-access <username> - blocks access to the repository for a specific user if the repository is private\n"
 		 "- allow-edit <username> - allows edit rights to a specific user for the current repository\n"
@@ -140,9 +140,10 @@ void util_list_or_delete_files(const char *directory, bool delete_mode) {
   if (stat(directory, &st) != 0 && delete_mode == true) { return; }
   CHECKCL(stat(directory, &st) == 0, "Error at stat")
   CHECKCL (NULL != (dir = opendir(directory)), "Error at opening directory")
+  char full_filepath[PATH_MAX];
   while (NULL != (de = readdir(dir))) {
 	if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
-	  char *full_filepath = (char *)(malloc(strlen(directory) + strlen(de->d_name) + 1));
+	  bzero(full_filepath, PATH_MAX);
 	  strcpy(full_filepath, directory);
 	  strcat(full_filepath, "/");
 	  strcat(full_filepath, de->d_name);
@@ -158,14 +159,56 @@ void util_list_or_delete_files(const char *directory, bool delete_mode) {
 		  }
 		}
 	  }
-
-	  free(full_filepath);
 	}
   }
   CHECKCL(closedir(dir) == 0, "Error at closing directory")
 }
 
-i64 util_is_in_array(JSON_Array *array, char *str) {
+void util_delete_non_pushed_untouched_files(const char *current_working_dir) {
+  DIR *dir = NULL;
+  struct dirent *de;
+  struct stat st;
+  char dot_untouched[PATH_MAX];
+  bzero(dot_untouched, PATH_MAX);
+  strcpy(dot_untouched, current_working_dir);
+  strcat(dot_untouched, "/.untouched");
+  char dot_staged[PATH_MAX];
+  bzero(dot_staged, PATH_MAX);
+  strcpy(dot_staged, current_working_dir);
+  strcat(dot_staged, "/.staged");
+  CHECKCL(stat(dot_untouched, &st) == 0, "Error at stat")
+  CHECKCL(stat(dot_staged, &st) == 0, "Error at stat")
+  CHECKCL (NULL != (dir = opendir(dot_untouched)), "Error at opening directory")
+  char full_filepath_untouched[PATH_MAX];
+  char full_filepath_staged[PATH_MAX];
+  JSON_Value *marked_as_deleted_value = json_parse_file(".marked_as_deleted");
+  JSON_Array *marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
+  i64 position;
+  while (NULL != (de = readdir(dir))) {
+	if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
+	  position = util_is_in_array(marked_as_deleted_array, de->d_name);
+	  if (position != -1) {
+		bzero(full_filepath_untouched, PATH_MAX);
+		strcpy(full_filepath_untouched, dot_untouched);
+		strcat(full_filepath_untouched, "/");
+		strcat(full_filepath_untouched, de->d_name);
+		bzero(full_filepath_staged, PATH_MAX);
+		strcpy(full_filepath_staged, dot_staged);
+		strcat(full_filepath_staged, "/");
+		strcat(full_filepath_staged, de->d_name);
+		CHECKCL(stat(full_filepath_untouched, &st) == 0, "Error at stat for file %s", full_filepath_untouched)
+		if (S_ISREG(st.st_mode) != 0) {
+		  if (stat(full_filepath_staged, &st) == -1) {
+			CHECKCL(remove(full_filepath_untouched) == 0, "Cannot remove %s", full_filepath_untouched)
+		  }
+		}
+	  }
+	}
+  }
+  CHECKCL(closedir(dir) == 0, "Error at closing directory")
+}
+
+i64 util_is_in_array(JSON_Array *array, const char *str) {
   i32 length = json_array_get_count(array);
   for (i32 index = 0; index < length; ++index) {
 	if (strcmp(str, json_array_get_string(array, index)) == 0) {
@@ -189,48 +232,46 @@ void util_push_populate(const char *working_directory, JSON_Object *request_obje
 	marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
 	check_if_deleted = true;
   }
-  char *file_content = (char *)(malloc(MB5));
+  char *file_content = (char *)(calloc(MB5, sizeof(char)));
   DIR *dir1, *dir2 = NULL;
   struct dirent *de1, *de2;
   char dot_untouched[PATH_MAX];
   bzero(dot_untouched, PATH_MAX);
-  char dot_staged[PATH_MAX];
-  bzero(dot_staged, PATH_MAX);
   strcpy(dot_untouched, working_directory);
   strcat(dot_untouched, "/.untouched");
+  char dot_staged[PATH_MAX];
+  bzero(dot_staged, PATH_MAX);
   strcpy(dot_staged, working_directory);
   strcat(dot_staged, "/.staged");
   CHECKCL(stat(dot_untouched, &st) == 0, "Error at stat")
   CHECKCL(stat(dot_staged, &st) == 0, "Error at stat")
   CHECKCL (NULL != (dir1 = opendir(dot_staged)), "Error at opening directory")
+  char full_filepath_staged[PATH_MAX];
+  char full_filepath_untouched[PATH_MAX];
   while (NULL != (de1 = readdir(dir1))) {
 	if (strcmp(de1->d_name, ".") != 0 && strcmp(de1->d_name, "..") != 0) {
-	  char *full_filepath = (char *)(malloc(strlen(dot_staged) + strlen(de1->d_name) + 1));
-	  bzero(full_filepath, strlen(dot_staged) + strlen(de1->d_name) + 1);
-	  strcpy(full_filepath, dot_staged);
-	  strcat(full_filepath, "/");
-	  strcat(full_filepath, de1->d_name);
-	  CHECKCL(stat(full_filepath, &st) == 0, "Error at stat for file %s", full_filepath)
+	  bzero(full_filepath_staged, PATH_MAX);
+	  strcpy(full_filepath_staged, dot_staged);
+	  strcat(full_filepath_staged, "/");
+	  strcat(full_filepath_staged, de1->d_name);
+	  CHECKCL(stat(full_filepath_staged, &st) == 0, "Error at stat for file %s", full_filepath_staged)
 	  if (S_ISREG(st.st_mode) != 0) {
 		json_array_append_string(filenames_array, de1->d_name);
-		i32 source_fd = open(full_filepath, O_RDONLY);
-		CHECKCL(source_fd != -1, "Could not open %s file", full_filepath)
+		i32 source_fd = open(full_filepath_staged, O_RDONLY);
+		CHECKCL(source_fd != -1, "Could not open %s file", full_filepath_staged)
 		bzero(file_content, MB5);
-		CHECKCL(read_with_retry(source_fd, file_content, st.st_size) == st.st_size, "Partial write could not be solved")
-		char *untouched_filepath = (char *)(malloc(strlen(dot_untouched) + strlen(de1->d_name) + 1));
-		bzero(full_filepath, strlen(dot_untouched) + strlen(de1->d_name) + 1);
-		strcpy(untouched_filepath, dot_untouched);
-		strcat(untouched_filepath, "/");
-		strcat(untouched_filepath, de1->d_name);
-		i32 destination_fd = open(untouched_filepath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		CHECKCL(read_with_retry(source_fd, file_content, st.st_size) == st.st_size, "Partial read could not be solved")
+		json_array_append_string(file_contents_array, file_content);
+		bzero(full_filepath_untouched, PATH_MAX);
+		strcpy(full_filepath_untouched, dot_untouched);
+		strcat(full_filepath_untouched, "/");
+		strcat(full_filepath_untouched, de1->d_name);
+		i32 destination_fd = open(full_filepath_untouched, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 		CHECKCL(lseek(source_fd, 0, SEEK_SET) == 0, "Cannot move cursor to the beginning of the file")
 		util_copy_content_of_fd_to_fd(source_fd, destination_fd);
-		free(untouched_filepath);
-		CHECKCL(close(source_fd) == 0, "Could not close %s file", full_filepath)
-		CHECKCL(close(destination_fd) == 0, "Could not close %s file", full_filepath)
-		json_array_append_string(file_contents_array, file_content);
+		CHECKCL(close(source_fd) == 0, "Could not close %s file", full_filepath_untouched)
+		CHECKCL(close(destination_fd) == 0, "Could not close %s file", full_filepath_untouched)
 	  }
-	  free(full_filepath);
 	}
   }
   CHECKCL(closedir(dir1) == 0, "Error at closing directory")
@@ -239,21 +280,20 @@ void util_push_populate(const char *working_directory, JSON_Object *request_obje
 	if (strcmp(de2->d_name, ".") != 0 && strcmp(de2->d_name, "..") != 0) {
 	  if (check_if_deleted == false || util_is_in_array(marked_as_deleted_array, de2->d_name) == -1) {
 		if (util_is_in_array(filenames_array, de2->d_name) == -1) {
-		  char *full_filepath = (char *)(malloc(strlen(dot_untouched) + strlen(de2->d_name) + 1));
-		  bzero(full_filepath, strlen(dot_untouched) + strlen(de2->d_name) + 1);
-		  strcpy(full_filepath, dot_untouched);
-		  strcat(full_filepath, "/");
-		  strcat(full_filepath, de2->d_name);
-		  CHECKCL(stat(full_filepath, &st) == 0, "Error at stat for file %s", full_filepath)
+		  bzero(full_filepath_untouched, PATH_MAX);
+		  strcpy(full_filepath_untouched, dot_untouched);
+		  strcat(full_filepath_untouched, "/");
+		  strcat(full_filepath_untouched, de2->d_name);
+		  CHECKCL(stat(full_filepath_untouched, &st) == 0, "Error at stat for file %s", full_filepath_untouched)
 		  if (S_ISREG(st.st_mode) != 0) {
 			json_array_append_string(filenames_array, de2->d_name);
-			i32 file_descriptor = open(full_filepath, O_RDONLY);
-			CHECKCL(file_descriptor != -1, "Could not open %s file", full_filepath)
+			i32 file_descriptor = open(full_filepath_untouched, O_RDONLY);
+			CHECKCL(file_descriptor != -1, "Could not open %s file", full_filepath_untouched)
+			bzero(file_content, MB5);
 			CHECKCL(read_with_retry(file_descriptor, file_content, st.st_size) == st.st_size, "Partial write could not be solved")
-			CHECKCL(close(file_descriptor) == 0, "Could not close %s file", full_filepath)
+			CHECKCL(close(file_descriptor) == 0, "Could not close %s file", full_filepath_untouched)
 			json_array_append_string(file_contents_array, file_content);
 		  }
-		  free(full_filepath);
 		}
 	  }
 	}
@@ -262,7 +302,6 @@ void util_push_populate(const char *working_directory, JSON_Object *request_obje
   json_object_set_value(request_object, "filenames", filenames_value);
   json_object_set_value(request_object, "filecontents", file_contents_value);
   free(file_content);
-  util_list_or_delete_files(dot_staged, true);
 }
 
 bool util_is_natural_number(const char *str) {
@@ -326,10 +365,10 @@ void cmd_reset(i32 argc, char **argv) {
   struct stat st;
   CHECKCL(stat(path_helper, &st) == 0, "Error at stat")
   CHECKCL (NULL != (dir = opendir(path_helper)), "Error at opening directory")
+  char full_filepath[PATH_MAX];
   while (NULL != (de = readdir(dir))) {
 	if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
-	  char *full_filepath = (char *)(malloc(strlen(path_helper) + strlen(de->d_name) + 1));
-	  bzero(full_filepath, strlen(path_helper) + strlen(de->d_name) + 1);
+	  bzero(full_filepath, PATH_MAX);
 	  strcpy(full_filepath, path_helper);
 	  strcat(full_filepath, "/");
 	  strcat(full_filepath, de->d_name);
@@ -341,55 +380,59 @@ void cmd_reset(i32 argc, char **argv) {
 		CHECKCL(close(source_fd) == 0, "Could not close %s file", full_filepath)
 		CHECKCL(close(destination_fd) == 0, "Could not close %s file", full_filepath)
 	  }
-	  free(full_filepath);
 	}
   }
   CHECKCL(closedir(dir) == 0, "Error at closing directory")
 }
 
-void cmd_stage_file(i32 argc, char **argv) {
-  CHECKCL(argc == 3, "Usage: '%s' stage-file <filename>", argv[1])
-  CHECKCL(!strchr(argv[2], '/'), "You can use only local files")
-  CHECKCL(!util_is_internal_name(argv[2]), "You cannot operate with tool files")
+void cmd_stage_file(const char *filename) {
+  CHECKVOIDRETCL(!strchr(filename, '/'), "'%s' not staged: you can use only local files", filename)
+  CHECKVOIDRETCL(!util_is_internal_name(filename), "'%s' not staged: you cannot operate with tool files", filename)
   struct stat st;
-  CHECKCL(stat(argv[2], &st) != -1, "The file '%s' does not exist, cannot add", argv[2])
-  CHECKCL(S_ISREG(st.st_mode) != 0, "You cannot add only regular files")
-  CHECKCL(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
-  i32 source_fd = open(argv[2], O_RDONLY);
-  CHECKCL(source_fd != -1, "Cannot open file for reading '%s'", argv[2])
+  CHECKVOIDRETCL(stat(filename, &st) != -1, "'%s' not staged: the file does not exist, cannot stage", filename)
+  CHECKVOIDRETCL(S_ISREG(st.st_mode) != 0, "'%s' not staged: you can stage only regular files, '%s' is not a regular file", filename, filename)
+  CHECKVOIDRETCL(!(filename[0] == '.' && filename[1] == '/'),
+				 "'%s' not staged: there is no sense in using './' in filename, omit it next time",
+				 filename)
+  i32 source_fd = open(filename, O_RDONLY);
+  CHECKVOIDRETCL(source_fd != -1, "'%s' not staged: cannot open file for reading", filename)
   char curr_working_dir[PATH_MAX];
   bzero(curr_working_dir, PATH_MAX);
-  CHECKCL(getcwd(curr_working_dir, sizeof(curr_working_dir)) != NULL, "Cannot get the current directory path")
+  CHECKCL(getcwd(curr_working_dir, sizeof(curr_working_dir)) != NULL, "'%s' not staged:  cannot get the current directory path", filename)
   strcpy(curr_working_dir, ".staged/");
-  strcat(curr_working_dir, argv[2]);
+  strcat(curr_working_dir, filename);
   i32 destination_fd = open(curr_working_dir, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  CHECKCL(destination_fd != -1, "Cannot open file for writing '%s'", argv[2])
+  CHECKCL(destination_fd != -1, "'%s' not staged: cannot open file descriptor for writing in staging area", filename)
   util_copy_content_of_fd_to_fd(source_fd, destination_fd);
-  CHECKCL(close(source_fd) == 0, "Error at closing source fd for file %s", argv[2])
-  CHECKCL(close(destination_fd) == 0, "Error at closing destination fd for file %s", argv[2])
+  CHECKCL(close(source_fd) == 0, "'%s' not staged: error at closing source file descriptor", filename)
+  CHECKCL(close(destination_fd) == 0, "'%s' not staged: error at closing destination file descriptor", filename)
+  printf("%s successfully staged\n", filename);
 }
 
-void cmd_unstage_file(i32 argc, char **argv) {
-  CHECKCL(argc == 3, "Usage: '%s' unstage-file <filename>", argv[1])
-  CHECKCL(!strchr(argv[2], '/'), "You can use only local files")
-  CHECKCL(!util_is_internal_name(argv[2]), "You cannot operate with tool files")
-  CHECKCL(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+void cmd_unstage_file(const char *filename) {
+  CHECKVOIDRETCL(!strchr(filename, '/'), "'%s' not unstaged: you can use only local files", filename)
+  CHECKVOIDRETCL(!util_is_internal_name(filename), "'%s' not unstaged: you cannot operate with tool files", filename)
+  CHECKVOIDRETCL(!(filename[0] == '.' && filename[1] == '/'),
+				 "'%s' not unstaged: there is no sense in using './' in filename, omit it next time",
+				 filename)
   char path_helper[PATH_MAX];
   bzero(path_helper, PATH_MAX);
   strcpy(path_helper, ".staged/");
-  strcat(path_helper, argv[2]);
+  strcat(path_helper, filename);
   struct stat st;
-  CHECKCL(stat(path_helper, &st) != -1, "The file '%s' does not exist in the staging area, cannot unstage", argv[2])
-  CHECKCL(remove(path_helper) != -1, "The file '%s' could not be removed from the staging area", path_helper)
+  CHECKVOIDRETCL(stat(path_helper, &st) != -1, "'%s' not unstaged: the file does not exist in the staging area, cannot unstage", filename)
+  CHECKCL(remove(path_helper) != -1, "'%s' not unsaged: the file could not be removed from the staging area", filename)
+  printf("%s successfully unstaged\n", filename);
 }
 
-void cmd_delete_file(i32 argc, char **argv) {
-  CHECKCL(argc == 3, "Usage: '%s' delete-file <filename>", argv[1])
-  CHECKCL(!strchr(argv[2], '/'), "You can use only local files")
-  CHECKCL(!util_is_internal_name(argv[2]), "You cannot operate with tool files")
-  CHECKCL(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+void cmd_delete_file(const char *filename) {
+  CHECKVOIDRETCL(!strchr(filename, '/'), "'%s' not deleted: you can use only local files", filename)
+  CHECKVOIDRETCL(!util_is_internal_name(filename), "'%s' not deleted: you cannot operate with tool files", filename)
+  CHECKVOIDRETCL(!(filename[0] == '.' && filename[1] == '/'),
+				 "'%s' not deleted: there is no sense in using './' in filename, omit it next time",
+				 filename)
   struct stat st;
-  CHECKCL(stat(argv[2], &st) != -1, "The file '%s' does not exist, cannot delete", argv[2])
+  CHECKVOIDRETCL(stat(filename, &st) != -1, "'%s' not deleted: the file does not exist, cannot delete", filename)
   JSON_Value *marked_as_deleted_value;
   JSON_Array *marked_as_deleted_array;
   if (stat(".marked_as_deleted", &st) != -1) {
@@ -399,49 +442,49 @@ void cmd_delete_file(i32 argc, char **argv) {
 	marked_as_deleted_value = json_value_init_array();
 	marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
   }
-  json_array_append_string(marked_as_deleted_array, argv[2]);
+  json_array_append_string(marked_as_deleted_array, filename);
   json_serialize_to_file_pretty(marked_as_deleted_value, ".marked_as_deleted");
-  CHECKCL(remove(argv[2]) != -1, "The file '%s' could not be removed from the current working directory", argv[2])
+  CHECKCL(remove(filename) != -1, "'%s' not deleted: the file could not be removed from the current working directory", filename)
   char path_helper[PATH_MAX];
   bzero(path_helper, PATH_MAX);
   strcpy(path_helper, ".staged/");
-  strcat(path_helper, argv[2]);
+  strcat(path_helper, filename);
   if (stat(path_helper, &st) != -1) {
-	CHECKCL(remove(path_helper) != -1, "The file '%s' could not be removed from the staging area", path_helper)
+	CHECKCL(remove(path_helper) != -1, "'%s' not deleted: the file could not be removed from the staging area", path_helper)
   }
+  printf("%s successfully deleted\n", filename);
 }
 
-void cmd_restore_file(i32 argc, char **argv) {
-  CHECKCL(argc == 3, "Usage: '%s' restore-file <filename>", argv[1])
-  CHECKCL(!strchr(argv[2], '/'), "You can use only local files")
-  CHECKCL(!util_is_internal_name(argv[2]), "You cannot operate with tool files")
-  CHECKCL(!(argv[2][0] == '.' && argv[2][1] == '/'), "There is no sense in using './' in filenames, use the filename")
+void cmd_restore_file(const char *filename) {
+  CHECKVOIDRETCL(!strchr(filename, '/'), "'%s' not restored: you can use only local files", filename)
+  CHECKVOIDRETCL(!util_is_internal_name(filename), "'%s' not restored: you cannot operate with tool files", filename)
+  CHECKVOIDRETCL(!(filename[0] == '.' && filename[1] == '/'), "'%s' not restored: there is no sense in using './' in filename, omit it next time",
+				 filename)
   char path_helper[PATH_MAX];
   bzero(path_helper, PATH_MAX);
   strcpy(path_helper, ".untouched/");
-  strcat(path_helper, argv[2]);
+  strcat(path_helper, filename);
   struct stat st;
-  CHECKCL(stat(path_helper, &st) != -1, "The file '%s' does not exist in the .untouched directory, cannot restore", argv[2])
+  CHECKVOIDRETCL(stat(path_helper, &st) != -1, "'%s' not restored: the file does not exist in the .untouched directory, cannot restore", filename)
   i32 source_fd = open(path_helper, O_RDONLY);
-  i32 destination_fd = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  CHECKCL(source_fd != -1, "Cannot open file for reading '%s'", path_helper)
-  CHECKCL(destination_fd != -1, "Cannot open file for writing '%s'", argv[2])
+  i32 destination_fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  CHECKCL(source_fd != -1, "'%s' not restored: cannot open file descriptor for reading", filename)
+  CHECKCL(destination_fd != -1, "'%s' not restored: cannot open file descriptor for writing", filename)
   util_copy_content_of_fd_to_fd(source_fd, destination_fd);
-  CHECKCL(close(source_fd) == 0, "Error at closing source fd for file %s", argv[2])
-  CHECKCL(close(destination_fd) == 0, "Error at closing destination fd for file %s", argv[2])
+  CHECKCL(close(source_fd) == 0, "'%s' not restored: error at closing source file descriptor", filename)
+  CHECKCL(close(destination_fd) == 0, "'%s' not restored: error at closing destination file descriptor", filename)
   JSON_Value *marked_as_deleted_value = json_parse_file(".marked_as_deleted");
   JSON_Array *marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
-  for (u32 index = 0; index < json_array_get_count(marked_as_deleted_array); ++index) {
-	if (strcmp(json_array_get_string(marked_as_deleted_array, index), argv[2]) == 0) {
-	  json_array_remove(marked_as_deleted_array, index);
-	  break;
-	}
+  i64 position = util_is_in_array(marked_as_deleted_array, filename);
+  if (position != -1) {
+	json_array_remove(marked_as_deleted_array, position);
   }
   json_serialize_to_file_pretty(marked_as_deleted_value, ".marked_as_deleted");
+  printf("%s successfully restored\n", filename);
 }
 
 void cmd_append_message(i32 argc, char **argv) {
-  CHECKCL(argc == 3, "Usage: '%s' append-message <message>", argv[1])
+  CHECKCL(argc == 3, "Usage: '%s' message <message>", argv[1])
   JSON_Value *changelog_value;
   JSON_Array *changelog_array;
   struct stat st;
@@ -484,11 +527,40 @@ void cmd_list_staged(i32 argc, char **argv) {
 
 bool util_is_non_connection_cmd(const char *option) {
   return (strcmp(option, "help") == 0 || strcmp(option, "serv-conf") == 0 || strcmp(option, "init") == 0 || strcmp(option, "reset") == 0 ||
-	  strcmp(option, "stage-file") == 0 || strcmp(option, "unstage-file") == 0 || strcmp(option, "delete-file") == 0 ||
-	  strcmp(option, "restore-file") == 0 || strcmp(option, "append-message") == 0 || strcmp(option, "list-dirty") == 0 ||
+	  strcmp(option, "stage") == 0 || strcmp(option, "unstage") == 0 || strcmp(option, "delete") == 0 ||
+	  strcmp(option, "restore") == 0 || strcmp(option, "message") == 0 || strcmp(option, "list-dirty") == 0 ||
 	  strcmp(option, "list-untouched") == 0 || strcmp(option, "list-staged") == 0);
 }
 
+void util_multiple_args_command(void(*command)(const char *), u16 argc, char **argv) {
+  for (u16 index = 0; index < argc; ++index) {
+	command(argv[index]);
+  }
+}
+
+void util_execute_command_on_every_non_tool_file(void(*command)(const char *), const char *directory) {
+  DIR *dir = NULL;
+  struct dirent *de;
+  struct stat st;
+  CHECKCL(stat(directory, &st) == 0, "Error at stat")
+  CHECKCL (NULL != (dir = opendir(directory)), "Error at opening directory")
+  char full_filepath[PATH_MAX];
+  while (NULL != (de = readdir(dir))) {
+	if (strcmp(de->d_name, ".") != 0 && strcmp(de->d_name, "..") != 0) {
+	  if (util_is_internal_name(de->d_name) == false) {
+		bzero(full_filepath, PATH_MAX);
+		strcpy(full_filepath, directory);
+		strcat(full_filepath, "/");
+		strcat(full_filepath, de->d_name);
+		CHECKCL(stat(full_filepath, &st) == 0, "Error at stat for file %s", full_filepath)
+		if (S_ISREG(st.st_mode) != 0) {
+		  command(de->d_name);
+		}
+	  }
+	}
+  }
+  CHECKCL(closedir(dir) == 0, "Error at closing directory")
+}
 bool cmd_no_connection_distributor(i32 argc, char **argv) {
   char *option = argv[1];
   if (util_is_non_connection_cmd(option) == false) { return false; }
@@ -510,23 +582,59 @@ bool cmd_no_connection_distributor(i32 argc, char **argv) {
 	cmd_reset(argc, argv);
 	return true;
   }
-  if (strcmp(option, "stage-file") == 0) {
-	cmd_stage_file(argc, argv);
+  if (strcmp(option, "stage") == 0) {
+	CHECKCL(argc >= 3 || (argc == 3 && strcmp(argv[2], ".") == 0), "Usage: '%s' . | <filename1> [<filename2>, ...]", argv[1])
+	if (argc == 3 && strcmp(argv[2], ".") == 0) {
+	  char path_helper[PATH_MAX];
+	  bzero(path_helper, PATH_MAX);
+	  CHECKCL(getcwd(path_helper, sizeof(path_helper)) != NULL, "Cannot get the current directory path")
+	  util_execute_command_on_every_non_tool_file(cmd_stage_file, path_helper);
+	} else {
+	  util_multiple_args_command(cmd_stage_file, argc - 2, (argv + 2));
+	}
+
 	return true;
   }
-  if (strcmp(option, "unstage-file") == 0) {
-	cmd_unstage_file(argc, argv);
+  if (strcmp(option, "unstage") == 0) {
+	CHECKCL(argc >= 3 || (argc == 3 && strcmp(argv[2], ".") == 0), "Usage: '%s' . | <filename1> [<filename2>, ...]", argv[1])
+	if (argc == 3 && strcmp(argv[2], ".") == 0) {
+	  char path_helper[PATH_MAX];
+	  bzero(path_helper, PATH_MAX);
+	  CHECKCL(getcwd(path_helper, sizeof(path_helper)) != NULL, "Cannot get the current directory path")
+	  strcat(path_helper, "/.staged");
+	  util_execute_command_on_every_non_tool_file(cmd_unstage_file, path_helper);
+	} else {
+	  util_multiple_args_command(cmd_unstage_file, argc - 2, (argv + 2));
+	}
 	return true;
   }
-  if (strcmp(option, "delete-file") == 0) {
-	cmd_delete_file(argc, argv);
+  if (strcmp(option, "delete") == 0) {
+	CHECKCL(argc >= 3 || (argc == 3 && strcmp(argv[2], ".") == 0), "Usage: '%s' . | <filename1> [<filename2>, ...]", argv[1])
+	if (argc == 3 && strcmp(argv[2], ".") == 0) {
+	  char path_helper[PATH_MAX];
+	  bzero(path_helper, PATH_MAX);
+	  CHECKCL(getcwd(path_helper, sizeof(path_helper)) != NULL, "Cannot get the current directory path")
+	  strcat(path_helper, "/.untouched");
+	  util_execute_command_on_every_non_tool_file(cmd_delete_file, path_helper);
+	} else {
+	  util_multiple_args_command(cmd_delete_file, argc - 2, (argv + 2));
+	}
 	return true;
   }
-  if (strcmp(option, "restore-file") == 0) {
-	cmd_restore_file(argc, argv);
+  if (strcmp(option, "restore") == 0) {
+	CHECKCL(argc >= 3 || (argc == 3 && strcmp(argv[2], ".") == 0), "Usage: '%s' . | <filename1> [<filename2>, ...]", argv[1])
+	if (argc == 3 && strcmp(argv[2], ".") == 0) {
+	  char path_helper[PATH_MAX];
+	  bzero(path_helper, PATH_MAX);
+	  CHECKCL(getcwd(path_helper, sizeof(path_helper)) != NULL, "Cannot get the current directory path")
+	  strcat(path_helper, "/.untouched");
+	  util_execute_command_on_every_non_tool_file(cmd_restore_file, path_helper);
+	} else {
+	  util_multiple_args_command(cmd_restore_file, argc - 2, (argv + 2));
+	}
 	return true;
   }
-  if (strcmp(option, "append-message") == 0) {
+  if (strcmp(option, "message") == 0) {
 	cmd_append_message(argc, argv);
 	return true;
   }
@@ -652,8 +760,7 @@ void cmd_clone(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *request_
   json_object_dotset_string(request_object, "message_type", "clone_request");
   json_object_dotset_string(request_object, "repository_name", repo_local_name);
   json_object_dotset_boolean(request_object, "has_version", false);
-  char *buffer = (char *)(malloc(MB20));
-  bzero(buffer, MB20);
+  char *buffer = (char *)(calloc(MB20, sizeof(char)));
   CHECKCL(write_with_prefix(server_socket_fd, json_serialize_to_string(request_value), json_serialization_size(request_value)) == true,
 		  "Cannot send the clone request to the server")
   CHECKCL(read_with_prefix(server_socket_fd, buffer) == true, "Cannot receive response from server")
@@ -695,8 +802,7 @@ void cmd_pull(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *request_v
   util_list_or_delete_files(path_helper, true);
   json_object_dotset_string(request_object, "message_type", "pull_request");
   json_object_dotset_boolean(request_object, "has_version", false);
-  char *buffer = (char *)(malloc(MB20));
-  bzero(buffer, MB20);
+  char *buffer = (char *)(calloc(MB20, sizeof(char)));
   CHECKCL(write_with_prefix(server_socket_fd, json_serialize_to_string(request_value), json_serialization_size(request_value)) == true,
 		  "Cannot send the pull request to the server")
   CHECKCL(read_with_prefix(server_socket_fd, buffer) == true, "Cannot receive response from server")
@@ -774,7 +880,7 @@ void cmd_diff_version(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *r
   }
   CHECKCL(write_with_prefix(server_socket_fd, json_serialize_to_string(request_value), json_serialization_size(request_value)) == true,
 		  "Cannot send the checkout-file request to the server")
-  char *buffer = (char *)(malloc(MB10));
+  char *buffer = (char *)(calloc(MB10, sizeof(char)));
   CHECKCL(read_with_prefix(server_socket_fd, buffer) == true, "Cannot receive response from server")
   response_value = json_parse_string(buffer);
   response_object = json_value_get_object(response_value);
@@ -816,8 +922,7 @@ void cmd_checkout(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *reque
   json_object_dotset_string(request_object, "message_type", "checkout_request");
   json_object_dotset_boolean(request_object, "has_version", true);
   json_object_dotset_number(request_object, "version", version);
-  char *buffer = (char *)(malloc(MB20));
-  bzero(buffer, MB20);
+  char *buffer = (char *)(calloc(MB20, sizeof(char)));
   CHECKCL(write_with_prefix(server_socket_fd, json_serialize_to_string(request_value), json_serialization_size(request_value)) == true,
 		  "Cannot send the checkout request to the server")
   CHECKCL(read_with_prefix(server_socket_fd, buffer) == true, "Cannot receive response from server")
@@ -987,9 +1092,16 @@ void cmd_push(i32 server_socket_fd, i32 argc, JSON_Value *request_value) {
   is_error = json_object_dotget_boolean(response_object, "is_error");
   CHECKCL(is_error == false, "%s", json_object_dotget_string(response_object, "message"))
   printf("%s\n", json_object_dotget_string(response_object, "message"));
+
   if (stat(".marked_as_deleted", &st) == 0) {
+	util_delete_non_pushed_untouched_files(curr_working_dir);
 	CHECKCL(remove(".marked_as_deleted") == 0, "Cannot delete marker for deleted files")
   }
+  char dot_staged[PATH_MAX];
+  bzero(dot_staged, PATH_MAX);
+  strcpy(dot_staged, curr_working_dir);
+  strcat(dot_staged, "/.staged");
+  util_list_or_delete_files(dot_staged, true);
   CHECKCL(remove(".changelog") == 0, "Cannot remove changelog file")
 }
 
@@ -1077,6 +1189,7 @@ bool cmd_connection_distributor(i32 server_socket_fd, i32 argc, char **argv) {
 	return true;
   }
   if (strcmp(option, "checkout") == 0) {
+	printf("Am intrat aici");
 	cmd_checkout(server_socket_fd, argc, argv, request_value);
 	return true;
   }

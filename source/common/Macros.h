@@ -58,4 +58,11 @@ typedef uint64_t u64;
     fprintf(stderr, "\n");\
     exit(EXIT_FAILURE);\
   }
+
+#define CHECKVOIDRETCL(condition, ...)\
+  if(!(condition)){\
+    fprintf(stderr, __VA_ARGS__);\
+    fprintf(stderr, "\n");\
+    return;\
+  }
 #endif

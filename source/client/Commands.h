@@ -18,19 +18,21 @@ void util_push_populate(const char *working_directory, JSON_Object *request_obje
 bool util_is_natural_number(const char *str);
 void util_list_or_delete_files(const char *directory, bool delete_mode);
 void util_write_files_to_disk(JSON_Object *json_response_object, const char *repo_directory);
-i64 util_is_in_array(JSON_Array *array, char *str);
+i64 util_is_in_array(JSON_Array *array, const char *str);
 bool util_is_connection_cmd(const char *option);
 bool util_is_non_connection_cmd(const char *option);
+void util_multiple_args_command(void(*command)(const char *), u16 argc, char **argv);
+void util_execute_command_on_every_non_tool_file(void(*command)(const char *), const char *directory);
 
 void cmd_help(const char *executable, bool exit_after);
 void cmd_unknown(const char *executable, const char *command);
 void cmd_serv_conf(i32 argc, char **argv);
 void cmd_init(i32 argc, char **argv);
 void cmd_reset(i32 argc, char **argv);
-void cmd_stage_file(i32 argc, char **argv);
-void cmd_unstage_file(i32 argc, char **argv);
-void cmd_delete_file(i32 argc, char **argv);
-void cmd_restore_file(i32 argc, char **argv);
+void cmd_stage_file(const char *filename);
+void cmd_unstage_file(const char *filename);
+void cmd_delete_file(const char *filename);
+void cmd_restore_file(const char *filename);
 void cmd_append_message(i32 argc, char **argv);
 void cmd_list_dirty(i32 argc, char **argv);
 void cmd_list_untouched(i32 argc, char **argv);
