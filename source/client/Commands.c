@@ -79,11 +79,11 @@ void util_copy_content_of_fd_to_fd(i32 source_fd, i32 destination_fd) {
   char buffer[BUFSIZ];
   bzero(buffer, BUFSIZ);
   i32 bytes_read;
-  while ((bytes_read = read(source_fd, buffer, BUFSIZ)) != -1) {
+  while ((bytes_read = read_with_retry(source_fd, buffer, BUFSIZ)) != -1) {
 	if (bytes_read == 0) {
 	  break;
 	}
-	CHECKCL(write(destination_fd, buffer, bytes_read) == bytes_read, "Internal error at writing in staging area")
+	CHECKCL(write_with_retry(destination_fd, buffer, bytes_read) == bytes_read, "Internal error at writing in staging area")
 	bzero(buffer, BUFSIZ);
   }
 }
@@ -104,7 +104,7 @@ void cmd_help(const char *executable, bool exit_after) {
 		 "- list-remote [-v <version>] - lists the files from remote repository, if no version is provided the latest one "
 		 "is considered\n"
 		 "- register <username> <password> - creates a new account on the server\n"
-		 "- clone <repository>-name [<new_directory_name>]- clones the remote specified repository(latest version)\n"
+		 "- clone <repository-name> [<new_directory_name>]- clones the remote specified repository(latest version)\n"
 		 "- pull - gets latest remote version of the current repository\n"
 		 "- diff-file <filename> [-v <version>] - gets the differences of current working directory file and one from the "
 		 "server at specific version\n"
@@ -1189,7 +1189,6 @@ bool cmd_connection_distributor(i32 server_socket_fd, i32 argc, char **argv) {
 	return true;
   }
   if (strcmp(option, "checkout") == 0) {
-	printf("Am intrat aici");
 	cmd_checkout(server_socket_fd, argc, argv, request_value);
 	return true;
   }
