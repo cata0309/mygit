@@ -859,7 +859,7 @@ void cmd_diff_file(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *requ
   strcpy(path_helper, curr_working_dir);
   strcat(path_helper, "/");
   strcat(path_helper, argv[2]);
-  CHECKCL(execlp("diff", "diff", "-u", temp_path, path_helper, NULL) != -1, false, "Error at execlp()")
+  CHECKCL(execlp("diff", "diff", "-u", temp_path, path_helper, NULL) != -1, "Error at execlp()")
 }
 
 void cmd_diff_version(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *request_value) {

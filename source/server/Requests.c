@@ -7,6 +7,7 @@
 
 #include <string.h>
 #include <fcntl.h>
+#include <limits.h>
 
 u32 get_epoch_time(void) {
   return (u32)(time(NULL));
@@ -531,10 +532,10 @@ bool rq_push(sqlite3 *sqlite3_descriptor, const char *repository_name, JSON_Obje
   bzero(received_file_content, MB5);
   char received_file_name[MAX_FILE_PATH_LEN];
   bzero(received_file_name, MAX_FILE_PATH_LEN);
-  char path_file_version1[MAX_FILE_PATH_LEN];
-  bzero(path_file_version1, MAX_FILE_PATH_LEN);
-  char path_file_version2[MAX_FILE_PATH_LEN];
-  bzero(path_file_version2, MAX_FILE_PATH_LEN);
+  char path_file_version1[PATH_MAX];
+  bzero(path_file_version1, PATH_MAX);
+  char path_file_version2[PATH_MAX];
+  bzero(path_file_version2, PATH_MAX);
   i32 fd_version1, fd_version2, pipes[2], nr_bytes_read;
   pid_t pid;
   // make sure to get the diff using unix_time variable, name of file, temp folder
@@ -566,7 +567,7 @@ bool rq_push(sqlite3 *sqlite3_descriptor, const char *repository_name, JSON_Obje
 		  // child
 		  CHECKRET(close(pipes[READ_END]) == 0, false, "Error at close() READ_END")
 		  CHECKRET(dup2(pipes[WRITE_END], STDOUT_FILENO) != -1, false, "Error at dup2()")
-		  CHECKEXIT(execlp("diff", "diff", "-u", path_file_version1, path_file_version2, NULL) != -1, false, "Error at execlp()")
+		  CHECKEXIT(execlp("diff", "diff", "-u", path_file_version1, path_file_version2, NULL) != -1, "Error at execlp()")
 		  // no need for exit since it is used exec
 		}
 		// parent

@@ -31,7 +31,7 @@ i32 main(i32 argc, char **argv) {
   struct stat st;
   if (stat("database.db", &st) == -1) {
 	// the file does not exist
-	CHECKEXIT(create_database("database.db") == true, false, "Cannot create database")
+	CHECKEXIT(create_database("database.db") == true, "Cannot create database")
   }
   char *conversion_ptr;
   u16 port = (u16)strtol(argv[2], &conversion_ptr, 10);
@@ -58,7 +58,7 @@ i32 main(i32 argc, char **argv) {
 	  continue;
 	}
 	pid = fork();
-	CHECKEXIT (pid != -1, false, "Error at fork()")
+	CHECKEXIT (pid != -1, "Error at fork()")
 	if (pid == 0) {
 	  // child
 	  char *request_buffer = (char *)(malloc(MB20));

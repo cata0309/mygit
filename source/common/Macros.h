@@ -15,7 +15,7 @@ typedef int64_t i64;
 typedef uint64_t u64;
 #define MAX_TABLE_NAME_LEN 20
 #define MAX_SQL_STMT_LEN 300
-#define MAX_FILE_PATH_LEN 50
+#define MAX_FILE_PATH_LEN 100
 #define MAX_REPO_NAME_LEN 40
 #define MAX_USER_NAME_LEN 25
 #define MAX_PASSWORD_LEN 35
