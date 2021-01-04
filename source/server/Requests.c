@@ -44,7 +44,7 @@ bool rq_login(sqlite3 *sqlite3_descriptor, JSON_Object *request_object) {
 }
 
 bool rq_allow_access_or_edit(sqlite3 *sqlite3_descriptor, const char *repository_name, JSON_Object *request_object,
-							 JSON_Object *response_object, bool allow_access_mode) {
+							 JSON_Object *response_object, bool allow_edit_mode) {
   bool helper_bool = false;
   const char *requester_username = json_object_dotget_string(request_object, "username");
   const char *other_username = json_object_dotget_string(request_object, "other_username");
@@ -65,12 +65,11 @@ bool rq_allow_access_or_edit(sqlite3 *sqlite3_descriptor, const char *repository
 						   "Cannot add permissions to the requested username since it does not exist in the database");
 	return false;
   }
-  if (allow_access_mode == true) {
-	if (db_allow_access(sqlite3_descriptor, repository_name, other_username) == false) {
-	  json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add access to the requested user");
-	  return false;
-	}
-  } else {
+  if (db_allow_access(sqlite3_descriptor, repository_name, other_username) == false) {
+	json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add access to the requested user");
+	return false;
+  }
+  if (allow_edit_mode == true) {
 	if (db_allow_edit(sqlite3_descriptor, repository_name, other_username) == false) {
 	  json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add edit permissions to the requested user");
 	  return false;
@@ -111,11 +110,10 @@ bool rq_block_access_or_edit(sqlite3 *sqlite3_descriptor, const char *repository
 	  json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add edit access to the requested user");
 	  return false;
 	}
-  } else {
-	if (db_block_edit(sqlite3_descriptor, repository_name, other_username) == false) {
-	  json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add edit permissions to the requested user");
-	  return false;
-	}
+  }
+  if (db_block_edit(sqlite3_descriptor, repository_name, other_username) == false) {
+	json_object_set_string(response_object, "message", "[INT.ERROR] Cannot add edit permissions to the requested user");
+	return false;
   }
   json_object_set_string(response_object, "message", "Permissions to edit the repository have been revoked");
   return true;
@@ -299,7 +297,7 @@ bool rq_main_distributor(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_V
 	  json_object_set_string(response_object, "message", "Bad credentials, cannot resolve any operation");
 	  return false;
 	}
-	return rq_allow_access_or_edit(sqlite3_descriptor, repository_name, request_object, response_object, false);
+	return rq_allow_access_or_edit(sqlite3_descriptor, repository_name, request_object, response_object, true);
   }
   if (strcmp(message_type, "checkout_file_request") == 0) {
 	json_object_set_string(response_object, "message_type", "checkout_file_response");
@@ -352,7 +350,7 @@ bool rq_main_distributor(sqlite3 *sqlite3_descriptor, const char *buffer, JSON_V
 	  json_object_set_string(response_object, "message", "Bad credentials, cannot resolve any operation");
 	  return false;
 	}
-	return rq_allow_access_or_edit(sqlite3_descriptor, repository_name, request_object, response_object, true);
+	return rq_allow_access_or_edit(sqlite3_descriptor, repository_name, request_object, response_object, false);
   }
   if (strcmp(message_type, "block_access_request") == 0) {
 	json_object_set_string(response_object, "message_type", "dell_access_response");

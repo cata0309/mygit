@@ -36,6 +36,7 @@ void cmd_restore_file(const char *filename);
 void cmd_append_message(i32 argc, char **argv);
 void cmd_list_dirty(i32 argc, char **argv);
 void cmd_list_untouched(i32 argc, char **argv);
+void cmd_list_deleted(i32 argc, char **argv);
 void cmd_list_staged(i32 argc, char **argv);
 void cmd_list_remote(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *request_value);
 void cmd_clone(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *request_value);

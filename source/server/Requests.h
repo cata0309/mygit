@@ -13,7 +13,7 @@ bool rq_login(sqlite3 *sqlite3_descriptor, JSON_Object *request_object);
 bool rq_register(sqlite3 *sqlite3_descriptor, JSON_Object *request_object, JSON_Object *response_object);
 
 bool rq_allow_access_or_edit(sqlite3 *sqlite3_descriptor, const char *repository_name, JSON_Object *request_object, JSON_Object *response_object,
-							 bool allow_access_mode);
+							 bool allow_edit_mode);
 
 bool rq_block_access_or_edit(sqlite3 *sqlite3_descriptor, const char *repository_name, JSON_Object *request_object, JSON_Object *response_object,
 							 bool block_access_mode);

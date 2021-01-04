@@ -101,6 +101,7 @@ void cmd_help(const char *executable, bool exit_after) {
 		 "- list-dirty - lists the files from the working directory that are modified\n"
 		 "- list-untouched - lists the files from the version of the repository that was cloned\n"
 		 "- list-staged - lists the files from the staging area\n"
+		 "- list-deleted - lists the files that are marked as deleted from .untouched\n"
 		 "- list-remote [-v <version>] - lists the files from remote repository, if no version is provided the latest one "
 		 "is considered\n"
 		 "- register <username> <password> - creates a new account on the server\n"
@@ -516,6 +517,26 @@ void cmd_list_untouched(i32 argc, char **argv) {
   util_list_or_delete_files(curr_working_dir, false);
 }
 
+void cmd_list_deleted(i32 argc, char **argv) {
+  CHECKCL(argc == 2, "'%s' is a no arguments option, try again", argv[1])
+  struct stat st;
+  if (stat(".marked_as_deleted", &st) == 0) {
+	JSON_Value *marked_as_deleted_value = json_parse_file(".marked_as_deleted");
+	JSON_Array *marked_as_deleted_array = json_value_get_array(marked_as_deleted_value);
+	i32 length = json_array_get_count(marked_as_deleted_array);
+	if (length == 0) {
+	  printf("There is no filed marked as deleted\n");
+	} else {
+	  for (u32 index = 0; index < length; ++index) {
+		printf("- %s\n", json_array_get_string(marked_as_deleted_array, index));
+	  }
+	}
+  } else {
+	printf("There is no filed marked as deleted\n");
+	fflush(stdout);
+  }
+}
+
 void cmd_list_staged(i32 argc, char **argv) {
   CHECKCL(argc == 2, "'%s' is a no arguments option, try again", argv[1])
   char curr_working_dir[PATH_MAX];
@@ -529,7 +550,7 @@ bool util_is_non_connection_cmd(const char *option) {
   return (strcmp(option, "help") == 0 || strcmp(option, "serv-conf") == 0 || strcmp(option, "init") == 0 || strcmp(option, "reset") == 0 ||
 	  strcmp(option, "stage") == 0 || strcmp(option, "unstage") == 0 || strcmp(option, "delete") == 0 ||
 	  strcmp(option, "restore") == 0 || strcmp(option, "message") == 0 || strcmp(option, "list-dirty") == 0 ||
-	  strcmp(option, "list-untouched") == 0 || strcmp(option, "list-staged") == 0);
+	  strcmp(option, "list-untouched") == 0 || strcmp(option, "list-staged") == 0 || strcmp(option, "list-deleted") == 0);
 }
 
 void util_multiple_args_command(void(*command)(const char *), u16 argc, char **argv) {
@@ -644,6 +665,10 @@ bool cmd_no_connection_distributor(i32 argc, char **argv) {
   }
   if (strcmp(option, "list-untouched") == 0) {
 	cmd_list_untouched(argc, argv);
+	return true;
+  }
+  if (strcmp(option, "list-deleted") == 0) {
+	cmd_list_deleted(argc, argv);
 	return true;
   }
   if (strcmp(option, "list-staged") == 0) {
@@ -891,7 +916,7 @@ void cmd_diff_version(i32 server_socket_fd, i32 argc, char **argv, JSON_Value *r
   printf("Differences for between v%d and v%d\n", version, version - 1);
   for (u32 index = 0; index < length; ++index) {
 	printf("-> filename: %s\n", json_array_get_string(filenames_array, index));
-	printf("-> diff: %s\n", json_array_get_string(differences_array, index));
+	printf("*> diff: %s\n", json_array_get_string(differences_array, index));
   }
   printf("End of section\n");
   free(buffer);
